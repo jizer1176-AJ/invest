@@ -114,6 +114,9 @@
   .sec { padding:5px 10px; font-size:.8em; color:var(--ac); font-weight:700; background:var(--pn); border-bottom:1px solid var(--ln); display:flex; align-items:center; gap:6px; }
   .ebtn { font-size:.85em; padding:3px 8px; border:1px solid var(--ln); }
   .del { color:#f23645; cursor:pointer; padding:2px 6px; }
+  #sug { position:absolute; top:100%; left:0; right:0; min-width:280px; z-index:60; background:var(--pn); border:1px solid var(--ln); border-radius:8px; margin-top:4px; box-shadow:0 8px 24px rgba(0,0,0,.35); display:none; max-height:60vh; overflow:auto; }
+  .sg { display:flex; align-items:center; gap:6px; padding:7px 10px; cursor:pointer; border-bottom:1px solid var(--ln); }
+  .sg:hover, .sg.on { background:var(--hv); }
   #tip { position:fixed; z-index:70; width:min(320px,90vw); background:var(--pn); border:1px solid var(--ln); border-radius:10px; padding:10px 12px; box-shadow:0 8px 30px rgba(0,0,0,.35); display:none; font-size:.92em; }
   .fup { animation:fu .6s; } .fdn { animation:fd .6s; }
   @keyframes fu { 0% { background:rgba(242,54,69,.35); } 100% { background:transparent; } }
@@ -161,7 +164,7 @@
 <body>
 <div id="tb">
   <div id="symbox"><span id="nm">載入中…</span><span id="cd"></span><span id="pcwrap"><span id="px"></span> <span id="pc"></span></span></div>
-  <div class="search"><input id="q" placeholder="搜尋：2330、NVDA、BTC、TRUMP、TRUMP.P（永續）" enterkeyhint="search"><button id="go">🔍</button></div>
+  <div class="search" style="position:relative"><div id="sug"></div><input id="q" autocomplete="off" placeholder="搜尋：2330、NVDA、BTC、TRUMP、TRUMP.P（永續）" enterkeyhint="search"><button id="go">🔍</button></div>
   <button id="star" title="加入／移除追蹤">☆</button>
   <span class="sep"></span>
   <div class="seg" id="tfs"></div>
@@ -265,6 +268,7 @@ function load(sym, tf, opt) {
   }, opt.silent);
 }
 function show(d) {
+  var nl = { s: d.info.key, tf: d.tf }; if (!P.last || P.last.s !== nl.s || P.last.tf !== nl.tf) { P.last = nl; save_(true); }   // 記住上次看的商品與週期
   var newSym = !D || D.info.sym !== d.info.sym;
   D = d; SYM = d.info.key; TF = d.tf; tvHide('A');
   if (!CAT && !CAT0 && SYM0) setCat(catOf(d.info));
@@ -292,7 +296,7 @@ function prefetch(sym, key) {   // 背景先載入其他週期，之後切換幾
 /* ---------- 畫面 ---------- */
 function render(newSym) {
   var d = D, q = d.q;
-  $('nm').textContent = d.info.name; $('cd').textContent = (d.info.code || d.info.sym) + '・' + d.tfLabel;
+  $('nm').textContent = d.info.name; $('cd').textContent = (d.info.cn ? d.info.cn + '・' : '') + (d.info.code || d.info.sym) + '・' + d.tfLabel;
   $('px').textContent = fmt(q.price); $('px').className = cls(q.chg);
   $('pc').innerHTML = '<span class="' + cls(q.chg) + '">' + (q.chg > 0 ? '+' : '') + fmt(q.chg) + '（' + pct(q.pct) + '）' + (q.h24 ? '24h' : '') + '</span>';
   $('tfs').innerHTML = TFS.map(function (t) { return '<button class="' + (t[0] === TF ? 'on' : '') + '" data-tf="' + t[0] + '">' + t[1] + '</button>'; }).join('');
@@ -462,7 +466,7 @@ function tick() {
     var d = cx.d; if (!d || cx.live || TICKING[cx.id]) return;
     var sym = d.info.sym; TICKING[cx.id] = 1; setTimeout(function () { TICKING[cx.id] = 0; }, 15000);
     run('webTick', [d.info.key], function (t) {
-      TICKING[cx.id] = 0; var dd = cx.d; if (!t || !dd || t.sym !== sym || t.price == null) return;
+      TICKING[cx.id] = 0; var dd = cx.d; if (!t || !dd || t.sym !== dd.info.sym || dd.info.sym !== sym || t.price == null) return;
       var tl = t.time + 8 * 3600, last = dd.ser.t[dd.ser.t.length - 1], dur = TFSEC[dd.tf], roll = t.open && (dd.info.market === 'CRYPTO' || /m$|h$/.test(dd.tf));
       var bt = roll && tl >= last + dur ? last + dur * Math.floor((tl - last) / dur) : last;
       cx.tickOpen = t.open; applyBar(cx, { t: bt, o: t.price, h: t.price, l: t.price, c: t.price, tick: true });
@@ -592,7 +596,7 @@ document.addEventListener('click', function (e) { var t = e.target.closest ? e.t
 function renderTabs() {
   $('btabs').innerHTML = BT.map(function (t) { return '<button class="' + (t[0] === BTAB ? 'on' : '') + '" data-b="' + t[0] + '">' + t[1] + '</button>'; }).join('');
   $('btabs').innerHTML += '<span style="flex:1"></span><button id="minBtn" title="收合／展開">' + ($('bottom').classList.contains('min') ? '▴ 展開' : '▾ 收合') + '</button>';
-  each('#btabs button[data-b]', function (b) { b.onclick = function () { BTAB = b.getAttribute('data-b'); $('bottom').classList.remove('min'); P.bmin = 0; save_(false); renderTabs(); renderTab(); }; });
+  each('#btabs button[data-b]', function (b) { b.onclick = function () { BTAB = b.getAttribute('data-b'); $('bottom').classList.remove('min'); P.bmin = 0; P.btab = BTAB; save_(true); renderTabs(); renderTab(); }; });
   $('minBtn').onclick = function () { var m = $('bottom').classList.toggle('min'); P.bmin = m ? 1 : 0; save_(false); renderTabs(); };
 }
 function renderTab() { if (!D) return; if (MCH && BTAB !== 'macro') { try { MCH.remove(); } catch (e) {} MCH = null; } ({ sum: tSum, mtf: tMtf, macro: tMacro, news: tNews, ai: tAi, fut: tFut, vol: tVol, plan: tPlan, lv: tLv, desc: tDesc, evs: tEvs })[BTAB](); }
@@ -648,7 +652,6 @@ function tLv() {
     ma(5, 'MA5') + ma(20, 'MA20') + ma(60, 'MA60') + ma(120, 'MA120') + ma(240, 'MA240') + '<div><span>布林上軌</span><span>' + fmt(a.bu) + '</span></div><div><span>布林下軌</span><span>' + fmt(a.bl) + '</span></div></div>' +
     '<div class="note" style="margin-top:8px">均線數字紅色＝現價在均線之上，綠色＝在均線之下（依你的漲跌顏色設定）。</div>';
 }
-function tDesc() { $('bp').innerHTML = D.info.desc ? '<div style="line-height:1.7">' + D.info.desc + '</div>' : '<div class="note">這個商品暫時沒有介紹。</div>'; }
 function tEvs() {
   if (!EVS) { $('bp').innerHTML = '<div class="note">⏳ 載入中…</div>'; run('webEvents', [], function (l) { EVS = l; if (BTAB === 'evs') tEvs(); }, true); return; }
   var C = { '央行': '#ab47bc', '總經': '#42a5f5', '財報': '#66bb6a', '台股': '#ef5350', '美股': '#5c6bc0', '加密': '#ffa726', '政治': '#90a4ae', '結算': '#7e57c2' };
@@ -800,7 +803,7 @@ var SPLIT_BIND = function () {
 
 /* ---------- 畫線工具：水平線、趨勢線（存在這台裝置） ---------- */
 var DRAWS = (function () { try { return JSON.parse(localStorage.getItem('iaDraw') || '{}'); } catch (e) { return {}; } })(), DMODE = null, DTMP = null;
-function saveDraws() { try { localStorage.setItem('iaDraw', JSON.stringify(DRAWS)); } catch (e) {} }
+function saveDraws() { try { localStorage.setItem('iaDraw', JSON.stringify(DRAWS)); } catch (e) {} P.draws = DRAWS; save_(true); }
 function actCx() { return ACT === 'A' ? CA : EX[ACT] || CA; }
 function renderDraws(cx) {
   var list = DRAWS[cx.d.info.sym] || [], LC = LightweightCharts;
@@ -857,7 +860,7 @@ function renderCats() {
 }
 function setCat(c) {
   var parts = String(c).split('-'); c = parts[0]; if (parts[1]) SORT[c] = parts[1];
-  CAT = c; renderCats();
+  CAT = c; renderCats(); if (P.cat !== c) { P.cat = c; save_(true); }
   var m = MK[c];
   if (m) renderList(m);
   if (!m || Date.now() - m.at > 50000) {
@@ -902,7 +905,7 @@ function renderList(m) {
     if (r.section != null) {
       COL = !EDIT && !!(P.wcol || {})[r.section];
       var cnt = 0; for (var q = i + 1; q < rows.length && rows[q].section == null; q++) cnt++;
-      return '<div class="sec mrow0" data-sec="' + r.section.replace(/"/g, '') + '" style="cursor:pointer">' + (canDrag && EDIT ? '<span class="dh" title="拖曳">⋮⋮</span>' : '<span>' + (COL ? '▸' : '▾') + '</span>') + '<span class="secn" style="flex:1">' + r.section + ' <span class="note">(' + cnt + ')</span></span>' + (EDIT ? '<span class="del" title="刪除分隔線">✕</span>' : '') + '</div>';
+      return '<div class="sec mrow0" data-sec="' + r.section.replace(/"/g, '') + '" style="cursor:pointer">' + (canDrag ? '<span class="dh" title="拖曳整個分類">⋮⋮</span>' : '') + '<span>' + (COL ? '▸' : '▾') + '</span>' + '<span class="secn" style="flex:1">' + r.section + ' <span class="note">(' + cnt + ')</span></span>' + (EDIT ? '<span class="del" title="刪除分隔線">✕</span>' : '') + '</div>';
     }
     n++;
     var sym = CAT === 'crypto' || CAT === 'perp' || CAT === 'us' || (isW && /^(US|CRYPTO)$/.test(mk(r))), big1 = sym ? r.sub : r.name, small = sym ? r.name : r.sub;
@@ -926,33 +929,54 @@ function renderList(m) {
     $('wAddBtn').onclick = function () { var v = $('wAdd').value.trim(); if (!v) return; $('wAddBtn').disabled = true; run('webWatchSet', [TOKEN, v, true], function (w) { $('wAddBtn').disabled = false; if (w.error) { toast('⚠️ ' + w.error); return; } setW(w); toast('⭐ 已加入'); }); };
     $('wAdd').onkeydown = function (e) { if (e.key === 'Enter') $('wAddBtn').onclick(); };
     $('wSec').onclick = function () { var nm = prompt('分隔線名稱（例：台股、美股、加密）', '新分類'); if (!nm) return; var it = items(); it.unshift('#' + nm.slice(0, 12)); saveItems(it); };
-    $('wAuto').onclick = function () {
-      var g = { TW: [], US: [], CRYPTO: [], X: [] }; (W.list || []).forEach(function (r) { if (r.section == null) (g[mk(r)] || g.X).push(r.sym); });
-      var it = []; [['TW', '#台股'], ['US', '#美股'], ['CRYPTO', '#加密貨幣'], ['X', '#指數・外匯・原物料']].forEach(function (p) { if (g[p[0]].length) it = it.concat([p[1]], g[p[0]]); });
+    $('wAuto').onclick = function () {   // 自動分類：保留原本分類的位置，自訂名稱的分類不動
+      var cur = items(), secs = [], head = [], sec = null;
+      cur.forEach(function (x) { if (x.charAt(0) === '#') { sec = { name: x, key: secKey(x.slice(1)), list: [] }; secs.push(sec); } else (sec ? sec.list : head).push(x); });
+      var bucket = { TW: [], US: [], CRYPTO: [], X: [] };
+      head.concat.apply(head, secs.filter(function (z) { return z.key; }).map(function (z) { return z.list; })).forEach(function (x) { bucket[mkSym(x)].push(x); });
+      var it = [], used = {};
+      secs.forEach(function (z) {
+        if (!z.key) { it = it.concat([z.name], z.list); return; }
+        if (used[z.key]) return; used[z.key] = 1; it = it.concat([z.name], bucket[z.key]);
+      });
+      [['TW', '#台股'], ['US', '#美股'], ['CRYPTO', '#加密貨幣'], ['X', '#指數・外匯・原物料']].forEach(function (p) { if (!used[p[0]] && bucket[p[0]].length) it = it.concat([p[1]], bucket[p[0]]); });
       saveItems(it);
     };
   }
   if (isW && $('wEdit')) $('wEdit').onclick = function () { EDIT = !EDIT; renderList(MK.watch); };
   markCur();
 }
+function secKey(n) { return /台|TW/i.test(n) ? 'TW' : /美|US/i.test(n) ? 'US' : /加密|幣|CRYPTO|永續/i.test(n) ? 'CRYPTO' : /指數|外匯|原物料|其他|期貨|匯率/.test(n) ? 'X' : ''; }
+function mkSym(s) { return mk({ sym: s }); }
 function mk(r) { return /\.TWO?$|^\^TWII$|^\^TWOII$/.test(r.sym) ? 'TW' : /-USD$|-PERP$/.test(r.sym) ? 'CRYPTO' : /^[A-Z][A-Z.\-]{0,6}$/.test(r.sym) ? 'US' : 'X'; }
 function items() { return Array.prototype.map.call($('mlist').children, function (x) { return x.classList.contains('mrow0') ? '#' + x.getAttribute('data-sec') : x.getAttribute('data-s'); }).filter(Boolean); }
 function saveWatch() { saveItems(items()); }
 function saveItems(it) { run('webWatchSave', [TOKEN, it], function (w) { if (w.error) { toast('⚠️ ' + w.error); return; } setW(w); toast('✅ 已儲存（LINE「我的自選」也同步）'); }); }
 function setW(w) { W = w; MK.watch = { rows: w.list, at: Date.now() }; if (CAT === 'watch') renderList(MK.watch); renderStar(); }
 function pick(k) { if (SPLIT && ACT !== 'A' && EX[ACT]) loadX(EX[ACT], k); else { tvHide('A'); load(k); if (innerWidth < 820) scrollTo({ top: 0, behavior: 'smooth' }); } }
-/* 自選清單拖曳排序（滑鼠、手指都可以） */
+/* 自選清單拖曳（不用進編輯模式）：商品可拖到任何位置；拖分類標籤時，整組商品一起移動 */
 function dragStart(e) {
-  e.preventDefault(); var row = e.target.closest('.mrow, .mrow0'), list = $('mlist');
-  DRAG = row; row.classList.add('drag');
+  e.preventDefault(); e.stopPropagation();
+  var row = e.target.closest('.mrow, .mrow0'), list = $('mlist'), isSec = row.classList.contains('mrow0');
+  var group = [row];
+  if (isSec) { var nx = row.nextElementSibling; while (nx && !nx.classList.contains('mrow0')) { group.push(nx); nx = nx.nextElementSibling; } }
+  group.forEach(function (g) { g.classList.add('drag'); }); DRAG = row;
   var move = function (ev) {
-    var rows = Array.prototype.slice.call(list.children), y = ev.clientY;
-    for (var i = 0; i < rows.length; i++) { var r = rows[i].getBoundingClientRect(); if (rows[i] !== row && y > r.top && y < r.bottom) { list.insertBefore(row, y < r.top + r.height / 2 ? rows[i] : rows[i].nextSibling); break; } }
+    var y = ev.clientY, rows = Array.prototype.slice.call(list.children).filter(function (x) { return group.indexOf(x) < 0 && x.style.display !== 'none'; });
+    if (isSec) {   // 分類只能放在其他分類的前面或最後
+      var secs = rows.filter(function (x) { return x.classList.contains('mrow0'); }), target = null;
+      for (var i = 0; i < secs.length; i++) { var r = secs[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { target = secs[i]; break; } }
+      var first = rows[0] && !rows[0].classList.contains('mrow0') && secs[0] && y < secs[0].getBoundingClientRect().top ? null : target;
+      group.forEach(function (g) { list.insertBefore(g, first); });
+      if (!first) group.forEach(function (g) { list.appendChild(g); });
+    } else {
+      for (var k = 0; k < rows.length; k++) { var rr = rows[k].getBoundingClientRect(); if (y > rr.top && y < rr.bottom) { list.insertBefore(row, y < rr.top + rr.height / 2 ? rows[k] : rows[k].nextSibling); break; } }
+    }
     var lr = list.getBoundingClientRect(); if (y < lr.top + 30) list.scrollTop -= 8; else if (y > lr.bottom - 30) list.scrollTop += 8;
   };
   var up = function () {
     document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
-    row.classList.remove('drag'); DRAG = null; saveWatch();
+    group.forEach(function (g) { g.classList.remove('drag'); }); DRAG = null; saveWatch();
   };
   document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
 }
@@ -1010,6 +1034,52 @@ function renderSet() {
   $('resetSet').onclick = function () { P = merge_(null); applyTheme(); save_(true); renderSet(); renderInd(); $('ctype').value = P.ctype; redrawAll(); if (D) render(false); if (MK[CAT]) renderList(MK[CAT]); };
 }
 
+/* ---------- 搜尋建議（邊打字邊列出符合的商品） ---------- */
+var SG = [], SGI = -1, SGT = null;
+function sugRender() {
+  var box = $('sug'); if (!SG.length) { box.style.display = 'none'; return; }
+  box.innerHTML = SG.map(function (x, i) { return '<div class="sg' + (i === SGI ? ' on' : '') + '" data-i="' + i + '"><b>' + x.name + '</b> <span class="note">' + x.sub + '</span><span class="tag" style="margin-left:auto;background:var(--pn2);color:var(--sb)">' + x.mkt + '</span></div>'; }).join('');
+  box.style.display = 'block';
+  each('#sug .sg', function (el) { el.onpointerdown = function (e) { e.preventDefault(); sugPick(+el.getAttribute('data-i')); }; });
+}
+function sugPick(i) { var x = SG[i]; if (!x) return; $('q').value = ''; SG = []; sugRender(); $('q').blur(); pick(x.key); }
+function sugLocal(q) {   // 先用已載入的清單即時比對，伺服器結果回來再補
+  var Q = q.toUpperCase(), out = [], seen = {};
+  Object.keys(MK).forEach(function (c) { (MK[c].rows || []).forEach(function (r) { if (!r.sym || seen[r.sym] || out.length >= 8) return; if (String(r.name).toUpperCase().indexOf(Q) >= 0 || String(r.sub).toUpperCase().indexOf(Q) === 0) { seen[r.sym] = 1; var tw = mk(r) === 'TW'; out.push({ key: r.key, name: tw ? r.name : r.sub || r.name, sub: tw ? r.sub : r.name, mkt: (CATS.filter(function (x) { return x[0] === c; })[0] || ['', ''])[1].replace('⭐ ', '') }); } }); });
+  return out;
+}
+$('q').oninput = function () {
+  var q = $('q').value.trim(); SGI = -1; clearTimeout(SGT);
+  if (!q) { SG = []; sugRender(); return; }
+  SG = sugLocal(q); sugRender();
+  SGT = setTimeout(function () { run('webSearch', [q], function (r) { if ($('q').value.trim() !== q) return; var seen = {}; SG = SG.concat(r || []).filter(function (x) { if (seen[x.key]) return false; seen[x.key] = 1; return true; }).slice(0, 14); sugRender(); }, true); }, 250);
+};
+$('q').onkeydown = function (e) {
+  if (e.key === 'ArrowDown') { SGI = Math.min(SG.length - 1, SGI + 1); sugRender(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { SGI = Math.max(-1, SGI - 1); sugRender(); e.preventDefault(); }
+  else if (e.key === 'Escape') { SG = []; sugRender(); }
+  else if (e.key === 'Enter') { if (SGI >= 0) sugPick(SGI); else $('go').onclick(); }
+};
+$('q').onblur = function () { setTimeout(function () { SG = []; sugRender(); }, 150); };
+
+/* ---------- ETF 成分股（指標介紹分頁） ---------- */
+var ETFD = {};
+function tDesc() {
+  var d = D, h = d.info.desc ? '<div style="line-height:1.7">' + d.info.desc + '</div>' : (d.info.etf ? '' : '<div class="note">這個商品暫時沒有介紹。</div>');
+  if (d.info.etf) {
+    var k = d.info.key, e = ETFD[k];
+    h += '<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--pn);line-height:1.7"><b>💡 什麼是 ETF？</b><br>ETF（指數股票型基金）是把一籃子股票包成一檔，像買股票一樣在交易所買賣。買一張 0050，就等於同時持有台灣市值前 50 大公司。<br>・優點：自動分散風險、費用低、不用自己挑股票。<br>・要注意：追蹤的指數漲跌就是你的漲跌；高股息 ETF 看的是配息，不一定漲得多；槓桿型（例如正 2、TQQQ）長期持有會有耗損。</div>';
+    if (!e) { h += '<div class="note" style="margin-top:8px">⏳ 讀取成分股…</div>'; run('webEtf', [k], function (r) { ETFD[k] = r; if (BTAB === 'desc' && D.info.key === k) tDesc(); }, true); }
+    else if (e.list && e.list.length) {
+      var mx = Math.max.apply(null, e.list.map(function (x) { return x.w || 0; })) || 1;
+      h += '<h4 style="margin-top:12px">📦 前 ' + e.list.length + ' 大成分股' + (e.date ? '（' + e.date + '）' : '') + '</h4><table>' + e.list.map(function (x, i) {
+        return '<tr class="etfr" data-k="' + (x.code || '') + '" style="cursor:' + (x.code ? 'pointer' : 'default') + '"><td style="width:28px" class="note">' + (i + 1) + '</td><td><b>' + x.name + '</b> <span class="note">' + (x.code || '') + '</span></td><td style="width:45%">' + (x.w != null ? '<div style="display:flex;align-items:center;gap:6px"><div style="height:8px;border-radius:4px;background:var(--ac);width:' + (x.w / mx * 100).toFixed(0) + '%"></div><span>' + x.w.toFixed(2) + '%</span></div>' : '') + '</td></tr>';
+      }).join('') + '</table><div class="note" style="margin-top:6px">資料來源：' + e.src + '。點公司名稱可以直接看它的 K 線。</div>';
+    } else h += '<div class="note" style="margin-top:8px">暫時抓不到這檔 ETF 的成分股。</div>';
+  }
+  $('bp').innerHTML = h;
+  each('#bp .etfr', function (r) { r.onclick = function () { var c = r.getAttribute('data-k'); if (c) pick(c); }; });
+}
 /* ---------- 事件綁定 ---------- */
 $('go').onclick = function () { var v = $('q').value.trim(); if (v) { load(v); $('q').value = ''; $('q').blur(); } };
 $('q').onkeydown = function (e) { if (e.key === 'Enter') $('go').onclick(); };
@@ -1036,19 +1106,28 @@ setInterval(function () {   // 每分鐘自動更新目前商品與清單
 
 /* ---------- 啟動 ---------- */
 applyTheme(); $('ctype').value = P.ctype; if (P.bmin && innerWidth >= 820 && !VIEW0) $('bottom').classList.add('min');
-if (VIEW0 && BT.some(function (b) { return b[0] === VIEW0; })) BTAB = VIEW0;   // 從卡片的「大趨勢／新聞／AI 解讀」按鈕開啟 → 直接到該分頁
+if (VIEW0 && BT.some(function (b) { return b[0] === VIEW0; })) BTAB = VIEW0; else if (P.btab && BT.some(function (b) { return b[0] === P.btab; })) BTAB = P.btab;
+if (P.draws && !Object.keys(DRAWS).length) DRAWS = P.draws;   // 從卡片的「大趨勢／新聞／AI 解讀」按鈕開啟 → 直接到該分頁
 renderTabs();
-if (!TFP && P.dtf) TF = P.dtf;   // 沒指定週期 → 用你設定的預設週期
-var SYM0 = SYM, startCat = CAT0 || (SYM ? '' : 'watch');
+var SYM0 = SYM;
+if (!SYM && P.last && P.last.s) { SYM = P.last.s; if (!TFP) TF = P.last.tf || TF; }   // 沒指定商品 → 打開上次看的商品與週期
+else if (!TFP && P.dtf) TF = P.dtf;   // 指定商品但沒指定週期 → 用你設定的預設週期
+var startCat = CAT0 || (SYM0 ? '' : P.cat || 'watch');
 run('webWatch', [TOKEN], function (w) {
   W = w; MK.watch = { rows: w.list, at: Date.now() };
-  if (w.pref) { var oldTf = TF; P = merge_(w.pref); if (!TFP && P.dtf && P.dtf !== oldTf && !USERTF) load(null, P.dtf); try { localStorage.setItem('iaPref', JSON.stringify(P)); } catch (e) {} applyTheme(); $('ctype').value = P.ctype; if (D) { drawChart(false); renderDetail(); } }
+  if (w.pref) {
+    var oldTf = TF, lp = P; P = merge_(w.pref);
+    if (w.pref.draws) { DRAWS = w.pref.draws; try { localStorage.setItem('iaDraw', JSON.stringify(DRAWS)); } catch (e) {} }   // 畫線跟著帳號，換裝置也看得到
+    if (!SYM0 && P.last && P.last.s && !USERTF && (String(P.last.s).toUpperCase() !== String(SYM).toUpperCase() || P.last.tf !== TF)) load(P.last.s, P.last.tf);
+    else if (SYM0 && !TFP && P.dtf && P.dtf !== oldTf && !USERTF) load(null, P.dtf);
+    if (P.split > 1 && SPLITN === 1) setTimeout(function () { toggleSplit(Math.min(+P.split, innerWidth < 820 ? 2 : 3)); setAct('A'); }, 300);
+    if (!CAT0 && !SYM0 && P.cat && P.cat !== CAT) setCat(P.cat); try { localStorage.setItem('iaPref', JSON.stringify(P)); } catch (e) {} applyTheme(); $('ctype').value = P.ctype; if (D) { drawChart(false); renderDetail(); } }
   if (CAT === 'watch') renderList(MK.watch); renderStar();
 }, true);
 SPLIT_BIND();
 if (startCat) setCat(startCat);
 if (P.split > 1) setTimeout(function () { toggleSplit(Math.min(+P.split, innerWidth < 820 ? 2 : 3)); setAct('A'); }, 800);
-load(SYM || ({ us: '^GSPC', tw: '^TWII', crypto: 'BTC', fx: 'TWD=X', idx: 'DXY', cmd: 'GC=F' }[CAT0] || '2330'), TF);
+load(SYM || ({ us: '^GSPC', tw: '^TWII', crypto: 'BTC', fx: 'TWD=X', idx: 'DXY', cmd: 'GC=F' }[String(CAT0).split('-')[0]] || '2330'), TF);
 window.addEventListener('resize', function () { if (D && chart) { /* autoSize 會自動調整 */ } });
 </script>
 </body>
