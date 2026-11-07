@@ -99,7 +99,8 @@
   #paneA, #paneB, #paneC { position:relative; flex:1 1 0; min-width:0; min-height:0; overflow:hidden; }
   #paneB, #paneC { display:none; border-left:1px solid var(--ln); flex-direction:column; }
   body.split #paneB, body.split3 #paneC { display:flex; }
-  body.split #paneA.act, body.split #paneB.act, body.split #paneC.act { box-shadow:inset 0 0 0 2px var(--ac); }
+  body.split #paneA.act::after, body.split #paneB.act::after, body.split #paneC.act::after { content:''; position:absolute; inset:0; border:2px solid var(--ac); pointer-events:none; z-index:12; }
+  .pstar { padding:2px 6px; font-size:1.05em; }
   .xbar { display:flex; align-items:center; gap:6px; padding:4px 8px; border-bottom:1px solid var(--ln); flex-wrap:wrap; font-size:.9em; }
   .xbar input { width:110px; background:var(--pn); border:1px solid var(--ln); border-radius:6px; padding:3px 6px; }
   .xtfs button { padding:3px 6px; }
@@ -186,7 +187,7 @@
 
 <div id="main">
   <div id="left">
-    <div id="chartWrap"><div id="paneA"><div id="lg"></div><div id="plgs"></div><div id="cdn"></div><div id="spin">⏳ 更新中</div><div id="chart"></div></div><div id="paneB" class="px"><div id="bBar" class="xbar"><span id="bName" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span><input id="bQ" placeholder="第二個商品"><button id="bGo">🔍</button><div class="seg xtfs" id="bTfs"></div><span id="bSpin" class="note" style="display:none">⏳</span></div><div id="chartB" class="xchart"><div id="lgB"></div><div id="plgsB"></div><div id="cdnB"></div><div id="chartB2" style="position:absolute;inset:0"></div></div></div><div id="paneC" class="px"><div id="cBar" class="xbar"><span id="cName" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span><input id="cQ" placeholder="第三個商品"><button id="cGo">🔍</button><div class="seg xtfs" id="cTfs"></div><span id="cSpin" class="note" style="display:none">⏳</span></div><div id="chartC" class="xchart"><div id="lgC"></div><div id="plgsC"></div><div id="cdnC"></div><div id="chartC2" style="position:absolute;inset:0"></div></div></div></div>
+    <div id="chartWrap"><div id="paneA"><div id="lg"></div><div id="plgs"></div><div id="cdn"></div><div id="spin">⏳ 更新中</div><div id="chart"></div></div><div id="paneB" class="px"><div id="bBar" class="xbar"><span id="bName" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span><input id="bQ" placeholder="第二個商品"><button id="bGo">🔍</button><button id="bStar" class="pstar" title="加入／移除自選">☆</button><div class="seg xtfs" id="bTfs"></div><span id="bSpin" class="note" style="display:none">⏳</span></div><div id="chartB" class="xchart"><div id="lgB"></div><div id="plgsB"></div><div id="cdnB"></div><div id="chartB2" style="position:absolute;inset:0"></div></div></div><div id="paneC" class="px"><div id="cBar" class="xbar"><span id="cName" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span><input id="cQ" placeholder="第三個商品"><button id="cGo">🔍</button><button id="cStar" class="pstar" title="加入／移除自選">☆</button><div class="seg xtfs" id="cTfs"></div><span id="cSpin" class="note" style="display:none">⏳</span></div><div id="chartC" class="xchart"><div id="lgC"></div><div id="plgsC"></div><div id="cdnC"></div><div id="chartC2" style="position:absolute;inset:0"></div></div></div></div>
     <div id="bottom"><div class="tabs" id="btabs"></div><div id="bp"></div></div>
   </div>
   <aside id="side">
@@ -277,7 +278,7 @@ function show(d) {
   if (MTFKEY !== d.info.sym) {
     MTFKEY = d.info.sym; MTF = null; if (BTAB === 'mtf') renderTab();
     var k = d.info.sym;
-    run('webMtf', [d.info.key], function (m) { if (MTFKEY !== k) return; MTF = m; if (BTAB === 'mtf') renderTab(); prefetch(k, d.info.key); }, true);
+    run('webMtf', [d.info.key], function (m) { MTFC[k] = m; if (MTFKEY !== k) return; MTF = m; if (BTAB === 'mtf') renderTab(); prefetch(k, d.info.key); }, true);
   }
 }
 function catOf(i) {
@@ -599,9 +600,12 @@ function renderTabs() {
   each('#btabs button[data-b]', function (b) { b.onclick = function () { BTAB = b.getAttribute('data-b'); $('bottom').classList.remove('min'); P.bmin = 0; P.btab = BTAB; save_(true); renderTabs(); renderTab(); }; });
   $('minBtn').onclick = function () { var m = $('bottom').classList.toggle('min'); P.bmin = m ? 1 : 0; save_(false); renderTabs(); };
 }
-function renderTab() { if (!D) return; if (MCH && BTAB !== 'macro') { try { MCH.remove(); } catch (e) {} MCH = null; } ({ sum: tSum, mtf: tMtf, macro: tMacro, news: tNews, ai: tAi, fut: tFut, vol: tVol, plan: tPlan, lv: tLv, desc: tDesc, evs: tEvs })[BTAB](); }
+var DF = null, MTFC = {};
+function focusD() { var cx = ACT === 'A' ? CA : EX[ACT]; return (cx && cx.d) || D; }   // 下方資訊跟著目前選定（藍框）的圖表
+function setTfF(tf) { if (DF === D || ACT === 'A') load(null, tf); else loadX(EX[ACT], null, tf); }
+function renderTab() { DF = focusD(); if (!DF) return; if (MCH && BTAB !== 'macro') { try { MCH.remove(); } catch (e) {} MCH = null; } ({ sum: tSum, mtf: tMtf, macro: tMacro, news: tNews, ai: tAi, fut: tFut, vol: tVol, plan: tPlan, lv: tLv, desc: tDesc, evs: tEvs })[BTAB](); }
 function tSum() {
-  var a = D.a, ov = D.ov;
+  var a = DF.a, ov = DF.ov;
   $('bp').innerHTML = '<div class="big" style="color:' + oc(ov.color) + '">' + ov.label + '</div><div style="margin:6px 0 10px">' + a.summary + '</div>' +
     '<div class="kv"><div><span class="ik" data-k="trend">長線</span><span style="color:' + tcol(a.longT) + '">' + a.longT + '</span></div><div><span>中線</span><span style="color:' + tcol(a.midT) + '">' + a.midT + '</span></div>' +
     '<div><span>短線動能</span><span style="color:' + tcol(a.shortT) + '">' + a.shortT + '（' + a.sc + '/' + a.tot + '）</span></div><div><span class="ik" data-k="rsi">RSI(14)</span><span>' + (a.rsi == null ? '—' : a.rsi.toFixed(1)) + '</span></div>' +
@@ -609,45 +613,46 @@ function tSum() {
     '<h4 style="margin-top:12px">🔔 近期訊號</h4><div>' + (a.signals.length ? a.signals.map(function (x) { return '・' + x; }).join('<br>') : '暫無明顯訊號') + '</div>';
 }
 function tMtf() {
-  var m = MTF;
+  var m = MTFC[DF.info.sym];
+  if (!m && !MTFC['_' + DF.info.sym]) { MTFC['_' + DF.info.sym] = 1; var mk0 = DF.info.sym; run('webMtf', [DF.info.key], function (r) { MTFC[mk0] = r; if (BTAB === 'mtf') renderTab(); }, true); }
   if (!m) { $('bp').innerHTML = '<div class="note">⏳ 正在計算 15 分～週線的多週期共振…</div>'; return; }
   var ok = m.filter(function (x) { return !x.na; }), bull = ok.filter(function (x) { return /多/.test(x.ov); }).length, bear = ok.filter(function (x) { return /空/.test(x.ov); }).length;
   var c = bull >= 4 ? ['多週期共振偏多', 'var(--upc)'] : bear >= 4 ? ['多週期共振偏空', 'var(--dnc)'] : bull > bear ? ['偏多，但未全面共振', 'var(--upc)'] : bear > bull ? ['偏空，但未全面共振', 'var(--dnc)'] : ['方向分歧，以區間看待', 'var(--sb)'];
   $('bp').innerHTML = '<div class="big" style="color:' + c[1] + '">' + c[0] + '</div><div class="note">偏多 ' + bull + '／偏空 ' + bear + '／有效 ' + ok.length + ' 個週期。長週期定方向、短週期找進出場時機，方向一致時訊號較可靠。</div>' +
     '<table><tr><th>週期</th><th>長線</th><th>中線</th><th>短線</th><th>RSI</th><th>KD</th><th>判讀</th></tr>' + m.map(function (x) {
       return x.na ? '<tr><td>' + x.label + '</td><td colspan="6" class="fl">資料不足</td></tr>' :
-        '<tr style="cursor:pointer' + (x.tf === TF ? ';background:var(--pn2)' : '') + '" data-tf="' + x.tf + '"><td>' + x.label + '</td><td style="color:' + tcol(x.longT) + '">' + x.longT + '</td><td style="color:' + tcol(x.midT) + '">' + x.midT + '</td><td style="color:' + tcol(x.shortT) + '">' + x.shortT + '</td><td>' + (x.rsi == null ? '—' : x.rsi.toFixed(0)) + '</td><td>' + (x.k == null ? '—' : x.k > x.d ? '<span class="up">K&gt;D</span>' : '<span class="dn">K&lt;D</span>') + '</td><td style="color:' + oc(x.ovc) + ';font-weight:700">' + x.ov + '</td></tr>';
+        '<tr style="cursor:pointer' + (x.tf === DF.tf ? ';background:var(--pn2)' : '') + '" data-tf="' + x.tf + '"><td>' + x.label + '</td><td style="color:' + tcol(x.longT) + '">' + x.longT + '</td><td style="color:' + tcol(x.midT) + '">' + x.midT + '</td><td style="color:' + tcol(x.shortT) + '">' + x.shortT + '</td><td>' + (x.rsi == null ? '—' : x.rsi.toFixed(0)) + '</td><td>' + (x.k == null ? '—' : x.k > x.d ? '<span class="up">K&gt;D</span>' : '<span class="dn">K&lt;D</span>') + '</td><td style="color:' + oc(x.ovc) + ';font-weight:700">' + x.ov + '</td></tr>';
     }).join('') + '</table><div class="note" style="margin-top:6px">點任一列可切換到該週期。</div>';
-  each('#bp tr[data-tf]', function (r) { r.onclick = function () { load(null, r.getAttribute('data-tf')); }; });
+  each('#bp tr[data-tf]', function (r) { r.onclick = function () { setTfF(r.getAttribute('data-tf')); }; });
 }
 function tVol() {
-  var v = D.vol, r = v.ret || {};
+  var v = DF.vol, r = v.ret || {};
   $('bp').innerHTML = '<div class="kv">' +
-    '<div><span class="ik" data-k="atr">ATR(14，' + D.tfLabel + ')</span><span>' + fmt(v.atr) + '</span></div><div><span>ATR／價格</span><span>' + (v.atrPct == null ? '—' : v.atrPct.toFixed(2) + '%') + '</span></div>' +
+    '<div><span class="ik" data-k="atr">ATR(14，' + DF.tfLabel + ')</span><span>' + fmt(v.atr) + '</span></div><div><span>ATR／價格</span><span>' + (v.atrPct == null ? '—' : v.atrPct.toFixed(2) + '%') + '</span></div>' +
     '<div><span class="ik" data-k="hv">20 日年化波動率</span><span>' + (v.hv20 == null ? '—' : v.hv20.toFixed(1) + '%') + '</span></div><div><span>20 日平均振幅</span><span>' + (v.range20 == null ? '—' : v.range20.toFixed(2) + '%') + '</span></div>' +
     '<div><span class="ik" data-k="mdd">近一年最大回撤</span><span class="dn">' + (v.mdd == null ? '—' : v.mdd.toFixed(1) + '%') + '</span></div><div><span class="ik" data-k="pos52">52 週位置</span><span>' + (v.pos52 == null ? '—' : v.pos52.toFixed(0) + '%') + '</span></div></div>' +
     '<h4 style="margin-top:12px">📈 區間報酬</h4><div class="kv">' + Object.keys(r).map(function (k) { return '<div><span>' + k + '</span><span class="' + cls(r[k]) + '">' + pct(r[k]) + '</span></div>'; }).join('') + '</div>' +
     '<div class="note" style="margin-top:8px">ATR＝平均真實波幅，可用來抓停損距離；年化波動率越高代表價格越不穩，部位要越小。</div>';
 }
 function tPlan() {
-  var L = D.plan.long, S = D.plan.short;
+  var L = DF.plan.long, S = DF.plan.short;
   var box = function (x, t) {
     return '<div><b>' + t + '</b><p><span>進場</span><span>' + fmt(Math.min(x.entry[0], x.entry[1])) + '～' + fmt(Math.max(x.entry[0], x.entry[1])) + '</span></p><p><span>停損</span><span>' + fmt(x.stop) + '</span></p>' +
       '<p><span>目標 1</span><span>' + fmt(x.t1) + '</span></p><p><span>目標 2</span><span>' + fmt(x.t2) + '</span></p><p><span class="ik" data-k="rr">風險報酬比</span><span style="font-weight:700;color:' + (x.rr >= 2 ? 'var(--upc)' : x.rr >= 1 ? '#f7c948' : 'var(--dnc)') + '">1 : ' + (x.rr > 0 ? x.rr.toFixed(2) : '—') + '</span></p></div>';
   };
   $('bp').innerHTML = '<div class="plan">' + box(L, '📈 多方') + box(S, '📉 空方') + '</div>' +
-    '<div class="note" style="margin-top:8px">依' + D.tfLabel + '的最近支撐／壓力與 ATR（' + fmt(D.atr) + '）推算，停損設在支撐（壓力）外 0.5 倍 ATR；風險報酬比低於 1 通常不建議進場。</div>' +
+    '<div class="note" style="margin-top:8px">依' + DF.tfLabel + '的最近支撐／壓力與 ATR（' + fmt(DF.atr) + '）推算，停損設在支撐（壓力）外 0.5 倍 ATR；風險報酬比低於 1 通常不建議進場。</div>' +
     '<div class="calc">🧮 部位試算：資金 <input id="cap" type="number" value="1000000"> 風險 <input id="risk" type="number" value="1" step="0.5" style="width:60px">% <select id="dir"><option value="long">做多</option><option value="short">做空</option></select></div><div id="pos" style="margin-top:6px"></div>';
   var calc = function () {
-    var cap = +$('cap').value, risk = +$('risk').value / 100, x = $('dir').value === 'long' ? L : S, price = D.q.price, per = Math.abs(price - x.stop);
-    var qty = per > 0 ? cap * risk / per : 0, tw = D.info.market === 'TW' && D.info.code;
+    var cap = +$('cap').value, risk = +$('risk').value / 100, x = $('dir').value === 'long' ? L : S, price = DF.q.price, per = Math.abs(price - x.stop);
+    var qty = per > 0 ? cap * risk / per : 0, tw = DF.info.market === 'TW' && DF.info.code;
     $('pos').innerHTML = '現價 ' + fmt(price) + ' 進場、停損 ' + fmt(x.stop) + '：每單位風險 ' + fmt(per) + '，最多虧 ' + fmt(cap * risk, 0) + ' → 建議約 <b>' + (tw ? fmt(qty / 1000, 2) + ' 張（' + fmt(qty, 0) + ' 股）' : fmt(qty, qty < 10 ? 4 : 0) + ' 單位') + '</b>，部位金額約 ' + fmt(qty * price, 0) + '。';
   };
   ['cap', 'risk', 'dir'].forEach(function (id) { $(id).oninput = calc; $(id).onchange = calc; }); calc();
 }
 function tLv() {
-  var a = D.a, row = function (x, c) { return '<div><span>' + x[1] + '</span><span class="' + c + '">' + fmt(x[0]) + '</span></div>'; };
-  var ma = function (k, n) { return a.ma[k] == null ? '' : '<div><span>' + n + '</span><span class="' + cls(D.q.price - a.ma[k]) + '">' + fmt(a.ma[k]) + '</span></div>'; };
+  var a = DF.a, row = function (x, c) { return '<div><span>' + x[1] + '</span><span class="' + c + '">' + fmt(x[0]) + '</span></div>'; };
+  var ma = function (k, n) { return a.ma[k] == null ? '' : '<div><span>' + n + '</span><span class="' + cls(DF.q.price - a.ma[k]) + '">' + fmt(a.ma[k]) + '</span></div>'; };
   $('bp').innerHTML = '<div class="kv">' + a.res.map(function (x) { return row(x, 'up'); }).join('') + a.sup.map(function (x) { return row(x, 'dn'); }).join('') +
     ma(5, 'MA5') + ma(20, 'MA20') + ma(60, 'MA60') + ma(120, 'MA120') + ma(240, 'MA240') + '<div><span>布林上軌</span><span>' + fmt(a.bu) + '</span></div><div><span>布林下軌</span><span>' + fmt(a.bl) + '</span></div></div>' +
     '<div class="note" style="margin-top:8px">均線數字紅色＝現價在均線之上，綠色＝在均線之下（依你的漲跌顏色設定）。</div>';
@@ -664,8 +669,8 @@ function tEvs() {
 /* ---------- 大趨勢、新聞、AI 解讀（原本卡片按鈕的功能，改在網頁看，不洗版）---------- */
 var MAC = {}, NEWS = {}, AIR = {}, MCH = null;
 function tMacro() {
-  var key = D.info.key, m = MAC[key];
-  if (!m) { $('bp').innerHTML = '<div class="note">⏳ 計算 200 日均線、牛市支撐帶、200 週均線…</div>'; run('webMacro', [key], function (r) { MAC[key] = r; if (BTAB === 'macro' && D.info.key === key) tMacro(); }, true); return; }
+  var key = DF.info.key, m = MAC[key];
+  if (!m) { $('bp').innerHTML = '<div class="note">⏳ 計算 200 日均線、牛市支撐帶、200 週均線…</div>'; run('webMacro', [key], function (r) { MAC[key] = r; if (BTAB === 'macro' && DF.info.key === key) tMacro(); }, true); return; }
   if (m.error) { $('bp').innerHTML = '<div class="note">' + m.error + '</div>'; return; }
   var sc = function (x) { return x > 0 ? 'up' : x < 0 ? 'dn' : 'fl'; }, dp = m.dp;
   var row = function (x, k) { return '<tr><td>' + (k ? '<span class="ik" data-k="' + k + '">' + x.label + '</span>' : x.label) + '</td><td style="text-align:right">' + x.value + '</td><td class="' + sc(x.sc) + '" style="text-align:right;font-weight:700">' + x.status + '</td></tr>'; };
@@ -700,13 +705,13 @@ function tMacro() {
   } catch (e) {}
 }
 function tNews() {
-  var key = D.info.key, n = NEWS[key];
-  if (!n) { $('bp').innerHTML = '<div class="note">⏳ 搜尋 ' + D.info.name + ' 最新新聞…</div>'; run('webNews', [key], function (r) { NEWS[key] = r || []; if (BTAB === 'news' && D.info.key === key) tNews(); }, true); return; }
+  var key = DF.info.key, n = NEWS[key];
+  if (!n) { $('bp').innerHTML = '<div class="note">⏳ 搜尋 ' + DF.info.name + ' 最新新聞…</div>'; run('webNews', [key], function (r) { NEWS[key] = r || []; if (BTAB === 'news' && DF.info.key === key) tNews(); }, true); return; }
   $('bp').innerHTML = n.length ? n.map(function (x) { return '<a href="' + x.link + '" target="_blank" rel="noopener" style="display:block;padding:8px 0;border-bottom:1px solid var(--ln);color:var(--tx);text-decoration:none"><div style="font-weight:600;line-height:1.5">' + x.title + '</div><div class="note">' + (x.src || '') + (x.time ? '・' + x.time : '') + '</div></a>'; }).join('') : '<div class="note">最近一週沒有找到相關新聞。</div>';
 }
-function mktOf() { var i = D.info; return i.market === 'TW' ? '台股' : i.market === 'CRYPTO' ? '加密' : i.market === 'US' || /^\^(DJI|GSPC|IXIC|NDX|SOX|RUT|VIX)$|^(ES|NQ|YM)=F$/.test(i.sym) ? '美股' : '總經'; }
+function mktOf() { var i = DF.info; return i.market === 'TW' ? '台股' : i.market === 'CRYPTO' ? '加密' : i.market === 'US' || /^\^(DJI|GSPC|IXIC|NDX|SOX|RUT|VIX)$|^(ES|NQ|YM)=F$/.test(i.sym) ? '美股' : '總經'; }
 function tAi() {
-  var key = D.info.key, r = AIR[key];
+  var key = DF.info.key, r = AIR[key];
   var btns = '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="on" id="aiTa">🧠 AI 深度解讀（技術＋消息）</button><button id="aiMac" style="border:1px solid var(--ln)">🌍 AI 大趨勢解讀</button><button id="aiMkt" style="border:1px solid var(--ln)">📊 AI 盤勢（' + mktOf() + '）</button></div>' +
     '<div class="note" style="margin-top:6px">AI 會上網搜尋最新消息後整理，約需 20～40 秒；會使用你每天的 AI 次數，同一檔 30 分鐘內再看不扣次數。</div>';
   var body = '';
@@ -716,7 +721,7 @@ function tAi() {
     (r.cites && r.cites.length ? '<div class="note" style="margin-top:6px">參考來源：' + r.cites.map(function (c, i) { return '<a target="_blank" rel="noopener" style="color:var(--ac)" href="' + c.url + '">' + (i + 1) + '. ' + String(c.title).slice(0, 30) + '</a>'; }).join('　') + '</div>' : '') +
     '<div class="note">' + (r.kind === 'macro' ? '大趨勢解讀' : r.kind === 'mkt' ? 'AI 盤勢（' + r.mkt + '）' : '技術＋消息解讀') + '・' + r.time + (r.cached ? '（30 分鐘內的結果）' : '') + '・僅供參考，非投資建議</div>';
   $('bp').innerHTML = btns + body;
-  var go = function (kind) { AIR[key] = 'loading'; tAi(); run('webAi', [TOKEN, key, kind], function (x) { AIR[key] = x || { error: '沒有回應' }; if (BTAB === 'ai' && D.info.key === key) tAi(); }, true); };
+  var go = function (kind) { AIR[key] = 'loading'; tAi(); run('webAi', [TOKEN, key, kind], function (x) { AIR[key] = x || { error: '沒有回應' }; if (BTAB === 'ai' && DF.info.key === key) tAi(); }, true); };
   $('aiTa').onclick = function () { if (AIR[key] !== 'loading') go('ta'); };
   $('aiMac').onclick = function () { if (AIR[key] !== 'loading') go('macro'); };
   $('aiMkt').onclick = function () { if (AIR[key] !== 'loading') go(mktOf()); };
@@ -769,7 +774,7 @@ function toggleSplit(n) {
   setAct(SPLIT ? (SPLITN === 3 ? 'C' : 'B') : 'A');
   setTimeout(redrawAll, 60);
 }
-function setAct(p) { ACT = p; ['A', 'B', 'C'].forEach(function (x) { $('pane' + x).classList.toggle('act', SPLIT && p === x); }); }
+function setAct(p) { var ch = ACT !== p; ACT = p; ['A', 'B', 'C'].forEach(function (x) { $('pane' + x).classList.toggle('act', SPLIT && p === x); }); if (ch && D) { renderTab(); renderDetail(); markCur(); } }
 function loadX(cx, sym, tf) {
   if (sym) cx.sym = sym; if (tf) cx.tf = tf; P['split' + cx.id] = [cx.sym, cx.tf]; save_(false); tvHide(cx.id);
   var key = (cx.sym + '|' + cx.tf).toUpperCase(), c = DC[key], x = cx.px;
@@ -785,18 +790,27 @@ function loadX(cx, sym, tf) {
   }, true);
 }
 function loadB(sym, tf) { loadX(CB, sym, tf); }
-function drawX(cx, d) { cx.d = d; cx.sym = d.info.key; cx.tf = d.tf; draw(cx); headX(cx); }
+function drawX(cx, d) { cx.d = d; cx.sym = d.info.key; cx.tf = d.tf; draw(cx); headX(cx); if (ACT === cx.id) { renderTab(); renderDetail(); markCur(); } }
 function headX(cx) {
   var d = cx.d; if (!d) return; var q = d.q;
+  starX(cx);
   $(cx.px + 'Name').innerHTML = '<b>' + d.info.name + '</b> <span class="note">' + (d.info.code || d.info.sym) + '</span> <b class="' + cls(q.chg) + '">' + fmt(q.price, d.info.dp) + '</b> <span class="' + cls(q.chg) + '">' + pct(q.pct) + '</span>';
 }
 function bHead() { headX(CB); headX(CC); }
+function inWatch(sym) { return !!(W && W.list && W.list.some(function (x) { return x.sym && x.sym === sym; })); }
+function starX(cx) { var b = $(cx.px + 'Star'); if (!b || !cx.d) return; var on = inWatch(cx.d.info.sym); b.textContent = on ? '★' : '☆'; b.style.color = on ? '#f7c948' : ''; }
+function toggleWatch(d, done) {
+  if (!W || !W.login) { toast('請從 LINE 的按鈕開啟個人連結，才能同步追蹤清單'); return; }
+  var on = inWatch(d.info.sym);
+  run('webWatchSet', [TOKEN, d.info.key, !on], function (w) { if (w.error) { toast('⚠️ ' + w.error); return; } setW(w); [CB, CC].forEach(starX); toast(on ? '已從自選移除' : '⭐ 已加入自選（自動放進對應分類）'); if (done) done(); });
+}
 var SPLIT_BIND = function () {
   ['A', 'B', 'C'].forEach(function (x) { $('pane' + x).addEventListener('pointerdown', function () { if (SPLIT) setAct(x); }, true); });
   [CB, CC].forEach(function (cx) {
     var x = cx.px;
     $(x + 'Go').onclick = function () { var v = $(x + 'Q').value.trim(); if (v) { loadX(cx, v); $(x + 'Q').value = ''; } };
     $(x + 'Q').onkeydown = function (e) { if (e.key === 'Enter') $(x + 'Go').onclick(); };
+    $(x + 'Star').onclick = function (e) { e.stopPropagation(); if (cx.d) toggleWatch(cx.d); };
   });
   $('splitBtn').onclick = function () { toggleSplit(); };
 };
@@ -840,7 +854,8 @@ function renderDrawPop() {
 }
 /* ---------- 右側：商品細節 ---------- */
 function renderDetail() {
-  var d = D, q = d.q, v = d.vol, dp = d.info.dp;
+  DF = focusD(); if (!DF) return;
+  var d = DF, q = d.q, v = d.vol, dp = d.info.dp;
   var lo = v.lo52, hi = v.hi52, pos = lo != null && hi > lo ? Math.max(0, Math.min(100, (q.price - lo) / (hi - lo) * 100)) : null;
   var mk = { TW: '台股', US: '美股', CRYPTO: '加密貨幣', INDEX: '指數／外匯／商品' }[d.info.market] || '';
   $('detail').innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline"><b>' + d.info.name + '</b><span class="note">' + mk + '</span></div>' +
@@ -952,7 +967,7 @@ function mk(r) { return /\.TWO?$|^\^TWII$|^\^TWOII$/.test(r.sym) ? 'TW' : /-USD$
 function items() { return Array.prototype.map.call($('mlist').children, function (x) { return x.classList.contains('mrow0') ? '#' + x.getAttribute('data-sec') : x.getAttribute('data-s'); }).filter(Boolean); }
 function saveWatch() { saveItems(items()); }
 function saveItems(it) { run('webWatchSave', [TOKEN, it], function (w) { if (w.error) { toast('⚠️ ' + w.error); return; } setW(w); toast('✅ 已儲存（LINE「我的自選」也同步）'); }); }
-function setW(w) { W = w; MK.watch = { rows: w.list, at: Date.now() }; if (CAT === 'watch') renderList(MK.watch); renderStar(); }
+function setW(w) { W = w; MK.watch = { rows: w.list, at: Date.now() }; if (CAT === 'watch') renderList(MK.watch); renderStar(); [CB, CC].forEach(starX); }
 function pick(k) { if (SPLIT && ACT !== 'A' && EX[ACT]) loadX(EX[ACT], k); else { tvHide('A'); load(k); if (innerWidth < 820) scrollTo({ top: 0, behavior: 'smooth' }); } }
 /* 自選清單拖曳（不用進編輯模式）：商品可拖到任何位置；拖分類標籤時，整組商品一起移動 */
 function dragStart(e) {
@@ -980,7 +995,7 @@ function dragStart(e) {
   };
   document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
 }
-function markCur() { if (!D) return; each('#mlist .mrow', function (el) { el.classList.toggle('cur', el.getAttribute('data-s') === D.info.sym); }); }
+function markCur() { var f = focusD(); if (!f) return; each('#mlist .mrow', function (el) { el.classList.toggle('cur', el.getAttribute('data-s') === f.info.sym); }); }
 function renderStar() {
   if (!D || !W) return;
   var inList = W.list.some(function (x) { return x.sym && x.sym === D.info.sym; });
@@ -1060,16 +1075,18 @@ $('q').onkeydown = function (e) {
   else if (e.key === 'Escape') { SG = []; sugRender(); }
   else if (e.key === 'Enter') { if (SGI >= 0) sugPick(SGI); else $('go').onclick(); }
 };
+$('q').addEventListener('compositionend', function () { $('q').oninput(); });
+$('q').addEventListener('keyup', function (e) { if (!/Arrow|Enter|Escape/.test(e.key) && $('q').value.trim() !== (SGT && SGT.q)) { } });
 $('q').onblur = function () { setTimeout(function () { SG = []; sugRender(); }, 150); };
 
 /* ---------- ETF 成分股（指標介紹分頁） ---------- */
 var ETFD = {};
 function tDesc() {
-  var d = D, h = d.info.desc ? '<div style="line-height:1.7">' + d.info.desc + '</div>' : (d.info.etf ? '' : '<div class="note">這個商品暫時沒有介紹。</div>');
+  var d = DF, h = d.info.desc ? '<div style="line-height:1.7">' + d.info.desc + '</div>' : (d.info.etf ? '' : '<div class="note">這個商品暫時沒有介紹。</div>');
   if (d.info.etf) {
     var k = d.info.key, e = ETFD[k];
     h += '<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--pn);line-height:1.7"><b>💡 什麼是 ETF？</b><br>ETF（指數股票型基金）是把一籃子股票包成一檔，像買股票一樣在交易所買賣。買一張 0050，就等於同時持有台灣市值前 50 大公司。<br>・優點：自動分散風險、費用低、不用自己挑股票。<br>・要注意：追蹤的指數漲跌就是你的漲跌；高股息 ETF 看的是配息，不一定漲得多；槓桿型（例如正 2、TQQQ）長期持有會有耗損。</div>';
-    if (!e) { h += '<div class="note" style="margin-top:8px">⏳ 讀取成分股…</div>'; run('webEtf', [k], function (r) { ETFD[k] = r; if (BTAB === 'desc' && D.info.key === k) tDesc(); }, true); }
+    if (!e) { h += '<div class="note" style="margin-top:8px">⏳ 讀取成分股…</div>'; run('webEtf', [k], function (r) { ETFD[k] = r; if (BTAB === 'desc' && DF.info.key === k) tDesc(); }, true); }
     else if (e.list && e.list.length) {
       var mx = Math.max.apply(null, e.list.map(function (x) { return x.w || 0; })) || 1;
       h += '<h4 style="margin-top:12px">📦 前 ' + e.list.length + ' 大成分股' + (e.date ? '（' + e.date + '）' : '') + '</h4><table>' + e.list.map(function (x, i) {
