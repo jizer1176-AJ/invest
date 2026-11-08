@@ -573,6 +573,7 @@ function countdown(cx) {
   var el = $(cx.cdn), d = cx.d; if (!d || !cx.ms || !cx.chart) { el.style.display = 'none'; return; }
   var s = d.ser, L = s.t.length - 1, dur = TFSEC[d.tf], end = s.t[L] - 8 * 3600 + dur, rem = Math.floor(end - Date.now() / 1000);
   var crypto = d.info.market === 'CRYPTO', intra = /m$|h$/.test(d.tf);
+  if (crypto && rem <= 0 && rem > -dur) rem += dur;   // 新 K 棒還沒到時先接著倒數
   if (!(crypto || (intra && cx.tickOpen !== false)) || rem <= 0 || rem > dur) { el.style.display = 'none'; return; }
   var dd = Math.floor(rem / 86400), hh = Math.floor(rem % 86400 / 3600), mm = Math.floor(rem % 3600 / 60), ss = rem % 60, z = function (x) { return (x < 10 ? '0' : '') + x; };
   el.textContent = (dd ? dd + '天 ' : '') + (dd || hh ? z(hh) + ':' : '') + z(mm) + ':' + z(ss);
@@ -600,7 +601,7 @@ function wsStart(o) {
       if (x.e === '24hrTicker') { if (+x.o) { dd.q.prev = +x.o; dd.q.high = +x.h; dd.q.low = +x.l; dd.q.h24 = true; } return; }   // 24 小時漲跌用 Binance 自己的基準，和 App 一致
       if (x.e === 'aggTrade') {   // 逐筆成交：1 秒內更新好幾次，用畫面更新頻率合併
         var s0 = dd.ser, L0 = s0.t.length - 1, tt = x.T / 1000 + 8 * 3600, p = +x.p; if (!o.live || !(p > 0) || tt >= s0.t[L0] + TFSEC[tf] || tt < s0.t[L0]) return;
-        o.trP = p; if (!o.trRaf) o.trRaf = requestAnimationFrame(function () { o.trRaf = 0; var s1 = o.d.ser, L1 = s1.t.length - 1, q = o.trP; if (q == null) return; applyBar(o, { t: s1.t[L1], o: s1.o[L1], h: Math.max(s1.h[L1], q), l: Math.min(s1.l[L1], q), c: q }); });
+        o.trP = p; if (!o.trRaf) o.trRaf = setTimeout(function () { o.trRaf = 0; var s1 = o.d.ser, L1 = s1.t.length - 1, q = o.trP; if (q == null) return; applyBar(o, { t: s1.t[L1], o: s1.o[L1], h: Math.max(s1.h[L1], q), l: Math.min(s1.l[L1], q), c: q }); }, 80);
         return;
       }
       var k = x.k; if (!k) return; o.live = true; clearTimeout(t0);
@@ -1687,12 +1688,12 @@ function gLive(list) {
       ws.onmessage = function (ev) {
         var m = JSON.parse(ev.data), x = m.data; if (!x || !m.stream) return; var keys = map[pre + m.stream.split('@')[0]]; if (!keys) return;
         keys.forEach(function (key) {
-          var cd = GR.cards[key]; if (!cd) return; var s = cd.d, n = s.t.length - 1;
+          var cd = GR.cards[key]; if (!cd) return; var s = cd.d, n = s.t.length - 1; cd.lm = Date.now();
           if (x.e === 'kline') { var k = x.k; cd.live = true; gBar(key, { t: k.t / 1000 + 8 * 3600, o: +k.o, h: +k.h, l: +k.l, c: +k.c }); }
           else if (x.e === '24hrTicker') { s.q = s.q || {}; if (+x.o) s.q.prev = +x.o; }   // 24 小時漲跌和 Binance 同一個基準
           else if (x.e === 'aggTrade') {   // 逐筆成交，合併到畫面更新頻率
             var tt = x.T / 1000 + 8 * 3600; if (!cd.live || tt < s.t[n] || tt >= s.t[n] + TFSEC[s.tf]) return; cd.trP = +x.p;
-            if (!cd.trRaf) cd.trRaf = requestAnimationFrame(function () { cd.trRaf = 0; var s1 = cd.d, n1 = s1.t.length - 1, p = cd.trP; gBar(key, { t: s1.t[n1], o: s1.o[n1], h: Math.max(s1.h[n1], p), l: Math.min(s1.l[n1], p), c: p }); });
+            if (!cd.trRaf) cd.trRaf = setTimeout(function () { cd.trRaf = 0; var s1 = cd.d, n1 = s1.t.length - 1, p = cd.trP; gBar(key, { t: s1.t[n1], o: s1.o[n1], h: Math.max(s1.h[n1], p), l: Math.min(s1.l[n1], p), c: p }); }, 80);
           }
         });
       };
@@ -1702,9 +1703,17 @@ function gLive(list) {
   for (var i = 0; i < spot.length; i += 180) open('s:', spot.slice(i, i + 180), 'wss://stream.binance.com:9443/stream?streams=');
   for (var j = 0; j < fut.length; j += 180) open('f:', fut.slice(j, j + 180), 'wss://fstream.binance.com/stream?streams=');
   var stocks = list.filter(function (d) { return !d.error && d.market !== 'CRYPTO' && !gIsTv(d.key); }).map(function (d) { return d.key; }), sec = 0;
+  var cryp = list.filter(function (d) { return !d.error && d.market === 'CRYPTO'; });
   GR.timer = setInterval(function () {
-    if (document.hidden || !GR.on) return; if (gInd().cd) gCountdown(); else each('#gBody .gcd', function (e) { e.textContent = ''; });
-    if (stocks.length && ++sec % 5 === 0) run('webQuotes', [stocks], function (q) { stocks.forEach(function (k) { var cd = GR.cards[k]; if (!cd || !q[cd.d.sym]) return; var x = q[cd.d.sym], s = cd.d, n = s.c.length - 1; cd.d.q = Object.assign(cd.d.q || {}, x); gBar(k, { t: s.t[n], o: s.o[n], h: Math.max(s.h[n], x.price), l: Math.min(s.l[n], x.price), c: x.price, keepQ: true }); }); }, true);
+    if (!GR.on) return; try { if (gInd().cd) gCountdown(); else each('#gBody .gcd', function (e) { e.textContent = ''; }); } catch (e) {}
+    if (sec % 2 === 0) cryp.forEach(function (d0) {   // 即時連線沒資料時，直接向 Binance 查最新 K 棒（備援）
+      var cd = GR.cards[d0.key]; if (!cd || Date.now() - (cd.lm || 0) < 4000 || cd.rest) return;
+      var b = String(d0.code).replace(/\.P$/, '').replace(/-USD$/, '').toUpperCase(); if (!d0.perp) b = b.replace(/\d+$/, '');
+      cd.rest = 1; fetch((d0.perp ? 'https://fapi.binance.com/fapi/v1/klines' : 'https://api.binance.com/api/v3/klines') + '?symbol=' + b + 'USDT&interval=' + BNIV[tf] + '&limit=2').then(function (r) { return r.json(); }).then(function (a) {
+        cd.rest = 0; if (!Array.isArray(a)) return; a.forEach(function (k) { gBar(d0.key, { t: k[0] / 1000 + 8 * 3600, o: +k[1], h: +k[2], l: +k[3], c: +k[4] }); });
+      })['catch'](function () { cd.rest = 0; });
+    });
+    sec++; if (!document.hidden && stocks.length && sec % 5 === 0) run('webQuotes', [stocks], function (q) { stocks.forEach(function (k) { var cd = GR.cards[k]; if (!cd || !q[cd.d.sym]) return; var x = q[cd.d.sym], s = cd.d, n = s.c.length - 1; cd.d.q = Object.assign(cd.d.q || {}, x); gBar(k, { t: s.t[n], o: s.o[n], h: Math.max(s.h[n], x.price), l: Math.min(s.l[n], x.price), c: x.price, keepQ: true }); }); }, true);
   }, 1000);
 }
 function gBar(key, k) {
@@ -1728,7 +1737,8 @@ function gLiveInd(cd) {   // 指標跟著最新價重算（每 0.7 秒）
 }
 function gCountdown() {
   Object.keys(GR.cards).forEach(function (k) {
-    var cd = GR.cards[k], s = cd.d, n = s.t.length - 1, dur = TFSEC[s.tf], rem = Math.floor(s.t[n] - 8 * 3600 + dur - Date.now() / 1000), el = cd.el.querySelector('.gcd');
+    var cd = GR.cards[k], s = cd.d, n = s.t.length - 1, dur = TFSEC[s.tf], rem = Math.floor(s.t[n] - 8 * 3600 + dur - Date.now() / 1000), el = document.querySelector('#gBody .gcard[data-k="' + k + '"] .gcd') || cd.el.querySelector('.gcd'); if (!el) return;
+    if (rem <= 0 && rem > -dur && (s.market === 'CRYPTO' || /m$|h$/.test(s.tf))) rem += dur;   // 新 K 棒還沒到時先接著倒數
     if (rem <= 0 || rem > dur || (s.market !== 'CRYPTO' && !/m$|h$/.test(s.tf))) { el.textContent = ''; return; }
     var dd = Math.floor(rem / 86400), hh = Math.floor(rem % 86400 / 3600), mm = Math.floor(rem % 3600 / 60), ss = rem % 60, z = function (x) { return (x < 10 ? '0' : '') + x; };
     el.textContent = '⏱ ' + (dd ? dd + '天 ' : '') + (dd || hh ? z(hh) + ':' : '') + z(mm) + ':' + z(ss);
