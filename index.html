@@ -364,16 +364,16 @@ function iRsi(c, n) { var o = [null], g = 0, l = 0; for (var i = 1; i < c.length
 function iBB(c, n, k) { var m = iSma(c, n), u = [], d = []; for (var i = 0; i < c.length; i++) { if (m[i] == null) { u.push(null); d.push(null); continue; } var s = 0; for (var j = i - n + 1; j <= i; j++) s += Math.pow(c[j] - m[i], 2); var sd = Math.sqrt(s / n); u.push(m[i] + k * sd); d.push(m[i] - k * sd); } return [u, d]; }
 function iKD(h, l, c, n, a, b) { var K = [], D = [], k = 50, d = 50; for (var i = 0; i < c.length; i++) { if (i < n - 1) { K.push(null); D.push(null); continue; } var hi = -Infinity, lo = Infinity; for (var j = i - n + 1; j <= i; j++) { hi = Math.max(hi, h[j]); lo = Math.min(lo, l[j]); } var rsv = hi > lo ? (c[i] - lo) / (hi - lo) * 100 : 50; k = (k * (a - 1) + rsv) / a; d = (d * (b - 1) + k) / b; K.push(k); D.push(d); } return [K, D]; }
 /* 依目前參數產生要畫的序列（存在 s.c_xxx，跳新 K 棒時會一起補位） */
-function calc(d) {
-  var s = d.ser, p = prm(), sig = JSON.stringify(p) + '|' + s.t.length + '|' + d.tf;
-  if (s._sig === sig) return; s._sig = sig;
+function calc(d, live) {   // live＝即時更新：全部用最新價格重算（不用伺服器算好的舊值）
+  var s = d.ser, p = prm(), sig = JSON.stringify(p) + '|' + s.t.length + '|' + d.tf, srv = !live && !s._live;
+  if (live) { s._live = 1; s._sig = ''; } else { if (s._sig === sig) return; s._sig = sig; }
   var c = s.c.map(function (x) { return x; });
-  p.ma.forEach(function (n, i) { var key = IND[i][0]; s['c_' + key] = n === DEFPRM.ma[i] && s[key] ? s[key] : iSma(c, n); });
-  var bb = +p.bb[0] === 20 && +p.bb[1] === 2 && s.bu ? [s.bu, s.bl] : iBB(c, +p.bb[0] || 20, +p.bb[1] || 2); s.c_bu = bb[0]; s.c_bl = bb[1];
-  if (+p.macd[0] === 12 && +p.macd[1] === 26 && +p.macd[2] === 9 && s.dif) { s.c_dif = s.dif; s.c_dea = s.dea; s.c_osc = s.osc; }
+  p.ma.forEach(function (n, i) { var key = IND[i][0]; s['c_' + key] = srv && n === DEFPRM.ma[i] && s[key] ? s[key] : iSma(c, n); });
+  var bb = +p.bb[0] === 20 && +p.bb[1] === 2 && srv && s.bu ? [s.bu, s.bl] : iBB(c, +p.bb[0] || 20, +p.bb[1] || 2); s.c_bu = bb[0]; s.c_bl = bb[1];
+  if (+p.macd[0] === 12 && +p.macd[1] === 26 && +p.macd[2] === 9 && srv && s.dif) { s.c_dif = s.dif; s.c_dea = s.dea; s.c_osc = s.osc; }
   else { var e1 = iEma(c, +p.macd[0]), e2 = iEma(c, +p.macd[1]), dif = c.map(function (x, i) { return e1[i] == null || e2[i] == null ? null : e1[i] - e2[i]; }), dea = iEma(dif.map(function (x) { return x; }), +p.macd[2]); s.c_dif = dif; s.c_dea = dea; s.c_osc = dif.map(function (x, i) { return x == null || dea[i] == null ? null : (x - dea[i]) * 2; }); }
-  s.c_rsi = p.rsi === 14 && s.rsi ? s.rsi : iRsi(c, p.rsi);
-  var kd = +p.kd[0] === 9 && +p.kd[1] === 3 && +p.kd[2] === 3 && s.k ? [s.k, s.d] : iKD(s.h, s.l, c, +p.kd[0], +p.kd[1], +p.kd[2]); s.c_k = kd[0]; s.c_d = kd[1];
+  s.c_rsi = p.rsi === 14 && srv && s.rsi ? s.rsi : iRsi(c, p.rsi);
+  var kd = +p.kd[0] === 9 && +p.kd[1] === 3 && +p.kd[2] === 3 && srv && s.k ? [s.k, s.d] : iKD(s.h, s.l, c, +p.kd[0], +p.kd[1], +p.kd[2]); s.c_k = kd[0]; s.c_d = kd[1];
   // 長線指標：牛市支撐帶（20 週 SMA＋21 週 EMA）、200 日均線（只在日線、週線有意義）、維加斯通道（EMA 144／169，再加 EMA 12）
   var wk = d.tf === '1wk', dy = d.tf === '1d';
   s.c_bs = wk ? iSma(c, 20) : dy ? iSma(c, 140) : null; s.c_be = wk ? iEma(c, 21) : dy ? iEma(c, 147) : null;
@@ -395,12 +395,13 @@ function draw(cx) {
   var ch = LC.createChart($(cx.el), { autoSize: true, layout: { background: { color: bg }, textColor: tx, fontSize: Math.max(10, P.fs - 2), panes: { separatorColor: ln, separatorHoverColor: css('--ac') } },
     grid: { vertLines: { color: gr }, horzLines: { color: gr } }, rightPriceScale: { borderColor: ln, mode: P.log ? 1 : 0, scaleMargins: { top: 0.08, bottom: 0.06 } },
     timeScale: { borderColor: ln, timeVisible: !/1d|1wk/.test(d.tf), rightOffset: 8 }, crosshair: { mode: 0 } });
-  cx.chart = ch;
+  cx.chart = ch; cx.lv = []; cx.vs = null; cx.hs = null;
   var dp = d.info.dp, pf = { type: 'price', precision: dp, minMove: Math.pow(10, -dp) }, fix = function (lo, hi) { return function () { return { priceRange: { minValue: lo, maxValue: hi } }; }; };
   var line = function (arr, color, pane, w, opt) {
     var o = { autoscaleInfoProvider: pane ? undefined : function () { return null; }, priceFormat: pane ? { type: 'price', precision: 2, minMove: 0.01 } : pf, color: color, lineWidth: w || 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
     for (var k in (opt || {})) o[k] = opt[k];
     var ser = ch.addSeries(LC.LineSeries, o, pane);
+    for (var kk in s) if (s[kk] === arr && /^c_/.test(kk)) { cx.lv.push({ ser: ser, k: kk }); break; }
     ser.setData(s.t.map(function (t, i) { return arr[i] == null ? { time: t } : { time: t, value: arr[i] }; })); return ser;
   };
   /* RSI／KD：上下界虛線＋中間區域淡色底，和 TradingView 一樣 */
@@ -447,12 +448,12 @@ function draw(cx) {
   var p = 1, al = function (c, a) { return c.length === 7 ? c + a : c; };
   if (I.vol) {
     var vs = ch.addSeries(LC.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, p);
-    vs.setData(s.t.map(function (t, i) { return { time: t, value: s.v[i] || 0, color: s.c[i] >= s.o[i] ? al(up, '99') : al(dn, '99') }; })); p++; cx.panes.push('vol');
+    vs.setData(s.t.map(function (t, i) { return { time: t, value: s.v[i] || 0, color: s.c[i] >= s.o[i] ? al(up, '99') : al(dn, '99') }; })); cx.vs = vs; p++; cx.panes.push('vol');
   }
   if (I.macd) {
     var hs = ch.addSeries(LC.HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, p);
     hs.setData(s.t.map(function (t, i) { var v = s.c_osc[i], pv = i ? s.c_osc[i - 1] : v; return v == null ? { time: t } : { time: t, value: v, color: v >= 0 ? (v >= pv ? up : al(up, '77')) : (v <= pv ? dn : al(dn, '77')) }; }));
-    line(s.c_dif, '#2962ff', p); line(s.c_dea, '#ff6d00', p);
+    cx.hs = hs; line(s.c_dif, '#2962ff', p); line(s.c_dea, '#ff6d00', p);
     hs.createPriceLine({ price: 0, color: 'rgba(128,128,128,.35)', lineStyle: 2, lineWidth: 1, axisLabelVisible: false }); p++; cx.panes.push('macd');
   }
   if (I.rsi) { band(p, 30, 70, 50, 'rgba(179,136,255,0.09)'); line(s.c_rsi, '#b388ff', p, 1.6, { autoscaleInfoProvider: fix(0, 100) }); p++; cx.panes.push('rsi'); }
@@ -538,12 +539,14 @@ function wsStart(o) {
   if (/^(usdt|usdc|dai|fdusd)$/.test(base)) return;
   var sym = d.info.sym, tf = d.tf;
   try {
-    var ws = new WebSocket((perp ? 'wss://fstream.binance.com/ws/' : 'wss://stream.binance.com:9443/ws/') + base + 'usdt@kline_' + BNIV[tf]); o.ws = ws;
+    var ws = new WebSocket((perp ? 'wss://fstream.binance.com/stream?streams=' : 'wss://stream.binance.com:9443/stream?streams=') + base + 'usdt@kline_' + BNIV[tf] + '/' + base + 'usdt@ticker'); o.ws = ws;
     var t0 = setTimeout(function () { if (!o.live) wsStop(o); }, 10000);
     ws.onmessage = function (ev) {
       var dd = o.d; if (!dd || dd.info.sym !== sym || dd.tf !== tf) { wsStop(o); return; }
-      var k = JSON.parse(ev.data).k; if (!k) return; o.live = true; clearTimeout(t0);
-      applyBar(o, { t: k.t / 1000 + 8 * 3600, o: +k.o, h: +k.h, l: +k.l, c: +k.c });
+      var m = JSON.parse(ev.data), x = m.data || m;
+      if (x.e === '24hrTicker') { if (+x.o) { dd.q.prev = +x.o; dd.q.high = +x.h; dd.q.low = +x.l; dd.q.h24 = true; } return; }   // 24 小時漲跌用 Binance 自己的基準，和 App 一致
+      var k = x.k; if (!k) return; o.live = true; clearTimeout(t0);
+      applyBar(o, { t: k.t / 1000 + 8 * 3600, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.q });
     };
     ws.onclose = function () { o.live = false; };
   } catch (e) {}
@@ -554,14 +557,16 @@ function applyBar(o, k) {
   if (k.t > s.t[L]) {
     if (k.t - s.t[L] > TFSEC[d.tf] * 3) return;
     Object.keys(s).forEach(function (x) { if (Array.isArray(s[x])) s[x].push(null); });
-    L++; s.t[L] = k.t; s.o[L] = k.o; s.h[L] = k.h; s.l[L] = k.l; s.c[L] = k.c; s.v[L] = 0;
-  } else { var same = k.t === s.t[L] && !k.tick; s.c[L] = k.c; s.h[L] = Math.max(s.h[L], k.c, same ? k.h : k.c); s.l[L] = Math.min(s.l[L], k.c, same ? k.l : k.c); }
+    L++; s.t[L] = k.t; s.o[L] = k.o; s.h[L] = k.h; s.l[L] = k.l; s.c[L] = k.c; s.v[L] = k.v || 0; o.newBar = true;
+  } else { var same = k.t === s.t[L] && !k.tick; s.c[L] = k.c; s.h[L] = Math.max(s.h[L], k.c, same ? k.h : k.c); s.l[L] = Math.min(s.l[L], k.c, same ? k.l : k.c); if (same && k.v != null) s.v[L] = k.v; }
   var old = d.q.price; d.q.price = k.c; d.q.chg = k.c - d.q.prev; d.q.pct = d.q.prev ? d.q.chg / d.q.prev * 100 : 0;
   try {
     if (P.ctype === 'line' || P.ctype === 'area') ms.update({ time: s.t[L], value: s.c[L] });
     else { var src = P.ctype === 'ha' ? heikin(s) : s; ms.update({ time: s.t[L], open: src.o[L], high: src.h[L], low: src.l[L], close: src.c[L] }); }
   } catch (e) {}
-  var now = Date.now(); if (now - (o.lastDom || 0) < 250) return; o.lastDom = now;
+  var now = Date.now();
+  if (now - (o.lastInd || 0) >= 500) { o.lastInd = now; liveInd(o); }   // 指標（均線、布林、MACD、RSI、成交量）每 0.5 秒跟著最新價重算
+  if (now - (o.lastDom || 0) < 250) return; o.lastDom = now;
   if (o === CA) {
     $('px').textContent = fmt(k.c); $('px').className = cls(d.q.chg);
     $('pc').innerHTML = '<span class="' + cls(d.q.chg) + '">' + (d.q.chg > 0 ? '+' : '') + fmt(d.q.chg) + '（' + pct(d.q.pct) + '）' + (d.q.h24 ? '24h' : '') + '</span>';
@@ -569,6 +574,21 @@ function applyBar(o, k) {
     if (now - (o.lastTitle || 0) > 2000) { o.lastTitle = now; setTitle(); }
   } else headX(o);
   if (o.last >= s.t.length - 2) legends(o, -1);
+}
+
+function liveInd(o) {
+  var d = o.d, s = d && d.ser; if (!s || !o.lv) return;
+  try {
+    calc(d, true);
+    var L = s.t.length - 1, from = o.newBar ? Math.max(0, L - 1) : L; o.newBar = false;
+    var up = css('--upc'), dn = css('--dnc'), al = function (c, a) { return c.length === 7 ? c + a : c; };
+    for (var i = from; i <= L; i++) {
+      var t = s.t[i];
+      o.lv.forEach(function (x) { var a = s[x.k]; if (!a) return; x.ser.update(a[i] == null ? { time: t } : { time: t, value: a[i] }); });
+      if (o.vs) o.vs.update({ time: t, value: s.v[i] || 0, color: s.c[i] >= s.o[i] ? al(up, '99') : al(dn, '99') });
+      if (o.hs && s.c_osc) { var v = s.c_osc[i], pv = i ? s.c_osc[i - 1] : v; o.hs.update(v == null ? { time: t } : { time: t, value: v, color: v >= 0 ? (v >= pv ? up : al(up, '77')) : (v <= pv ? dn : al(dn, '77')) }); }
+    }
+  } catch (e) {}
 }
 
 /* ---------- TradingView 圖表（BTC.D、TOTAL2、TOTAL3、USDT.D 這類自己算不出歷史的指標）---------- */
