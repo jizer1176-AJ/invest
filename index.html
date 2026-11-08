@@ -172,6 +172,8 @@
   .lqlist { max-height:34vh; overflow:auto; margin-top:6px; } .lqr { display:grid; grid-template-columns:70px 70px 70px 1fr 90px; gap:6px; padding:4px 2px; border-bottom:1px solid var(--ln); font-size:.9em; align-items:center; }
   .fedbars { display:flex; justify-content:center; align-items:flex-end; gap:18px; height:230px; margin-top:14px; } .fb { display:flex; flex-direction:column; align-items:center; gap:4px; } .fb i { width:56px; border-radius:4px 4px 0 0; display:block; } .fb span { font-size:.8em; color:var(--sb); }
   .fngc { width:110px; height:110px; border-radius:50%; border:8px solid; display:flex; flex-direction:column; align-items:center; justify-content:center; flex:0 0 auto; } .fngc b { font-size:2em; }
+  #backChip { position:fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:70; display:flex; gap:4px; background:var(--pn); border:1px solid var(--ac); border-radius:22px; padding:4px; box-shadow:0 6px 24px rgba(0,0,0,.45); }
+  #backChip button { border:0; border-radius:18px; padding:8px 14px; background:var(--ac); color:#fff; font-weight:700; } #backChip #bkX { background:transparent; color:var(--sb); padding:8px 10px; }
   .pop { position:fixed; z-index:50; background:var(--pn); border:1px solid var(--ln); border-radius:10px; box-shadow:0 8px 30px rgba(0,0,0,.35); padding:12px; display:none; }
   #indPop { width:250px; }
   #indPop label { display:flex; align-items:center; gap:8px; padding:5px 2px; cursor:pointer; }
@@ -304,7 +306,7 @@ function tcol(s) { return /多|強/.test(s || '') ? 'var(--upc)' : /空|弱/.tes
 function oc(c) { return /^#(555|666|777|888|999)/i.test(c || '') ? 'var(--sb)' : c; }
 function toast(t) { var m = $('msg'); m.textContent = t; m.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(function () { m.style.display = 'none'; }, 3500); }
 function run(fn, args, ok, quiet) {
-  var fail = function (e) { $('spin').style.display = 'none'; if (!quiet) toast('⚠️ ' + (e && e.message || e)); };
+  var fail = function (e) { $('spin').style.display = 'none'; if (e && e.message === 'skip') return; if (!quiet) toast('⚠️ ' + (e && e.message || e)); };
   if (GAS) { var r = google.script.run.withSuccessHandler(ok).withFailureHandler(fail); r[fn].apply(r, args); return; }
   if (!API) { fail('缺少 api 參數，請從 LINE 的按鈕開啟'); return; }
   var qa = encodeURIComponent(JSON.stringify(args)), big = qa.length > 1800;   // 資料太大（例如畫線）改用 POST
@@ -354,7 +356,9 @@ function pxSync(d, c, old) {
   }
 }
 function show(d) {
-  var nl = { s: d.info.key, tf: d.tf }; if (!P.last || P.last.s !== nl.s || P.last.tf !== nl.tf) { P.last = nl; save_(true); }   // 記住上次看的商品與週期
+  var nl = { s: d.info.key, tf: d.tf }, isCard = PREVIEW && [d.info.key, d.info.sym, d.info.code].some(function (x) { return String(x || '').toUpperCase() === String(SYM0).toUpperCase(); });
+  if (!isCard && PREVIEW) { PREVIEW = null; hideBack(); }
+  if (!isCard && (!P.last || P.last.s !== nl.s || P.last.tf !== nl.tf)) { P.last = nl; save_(true); }   // 記住上次看的商品與週期（從 LINE 卡片打開的不算，才不會洗掉原本的畫面）
   var newSym = !D || D.info.sym !== d.info.sym;
   D = d; SYM = d.info.key; TF = d.tf; tvHide('A');
   if (!CAT && !CAT0 && SYM0) setCat(catOf(d.info));
@@ -630,7 +634,7 @@ function liveInd(o) {
   var d = o.d, s = d && d.ser; if (!s || !o.lv) return;
   try {
     calc(d, true);
-    var L = s.t.length - 1, from = o.newBar ? Math.max(0, L - 1) : L; o.newBar = false;
+    var L = s.t.length - 1, from = L; o.newBar = false;
     var up = css('--upc'), dn = css('--dnc'), al = function (c, a) { return c.length === 7 ? c + a : c; };
     for (var i = from; i <= L; i++) {
       var t = s.t[i];
@@ -1365,6 +1369,7 @@ function spOpen(id, title) {
   if (/^fred:/.test(id)) spFred(body, src, id.slice(5)); else if (V[id]) V[id](body, src);
 }
 function spChart(el, opt) {
+  if (!el || !el.isConnected) throw new Error('skip');
   var LC = LightweightCharts, ch = LC.createChart(el, Object.assign({ autoSize: true, layout: { background: { color: css('--bg') }, textColor: css('--sb'), fontSize: Math.max(10, P.fs - 2), panes: { separatorColor: css('--ln') } }, grid: { vertLines: { color: 'transparent' }, horzLines: { color: css('--grid') } }, rightPriceScale: { borderColor: css('--ln') }, timeScale: { borderColor: css('--ln') }, crosshair: { mode: 0 } }, opt || {}));
   SPCH.push(ch); return ch;
 }
@@ -1385,7 +1390,7 @@ function spHalving(body, src) {
       '<div class="kv" style="margin-top:12px;text-align:left"><div><span>目前區塊高度</span><span>' + h.toLocaleString() + '</span></div><div><span>剩餘區塊</span><span>' + left.toLocaleString() + '</span></div><div><span>歷次減半</span><span>2012/11/28・2016/07/09・2020/05/11・2024/04/20</span></div></div>' +
       '<div class="note" style="margin-top:10px">歷史上，減半後 12～18 個月常出現週期高點；減半前後的走勢可在「月報酬表」對照。</div></div>';
   };
-  var go = function (h, avg, at) { render(h, avg, at); clearInterval(SPT); SPT = setInterval(function () { if ($('spBody') === body) render(h, avg, at); }, 1000); };
+  var go = function (h, avg, at) { if (!body.isConnected) return; render(h, avg, at); clearInterval(SPT); SPT = setInterval(function () { if ($('spBody') === body) render(h, avg, at); }, 1000); };
   fetch('https://mempool.space/api/blocks/tip/height').then(function (x) { return x.text(); }).then(function (h) {
     h = +h; if (!h) throw 0;
     fetch('https://mempool.space/api/v1/difficulty-adjustment').then(function (x) { return x.json(); }).then(function (j) { go(h, (j.timeAvg || 600000) / 1000, Date.now() / 1000); })['catch'](function () { go(h, 600, Date.now() / 1000); });
@@ -1394,6 +1399,7 @@ function spHalving(body, src) {
 function spMonthly(body, src) {
   src('資料：Yahoo Finance 月 K（BTC-USD）');
   run('webChain', ['monthly'], function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     if (!r || r.error || !r.monthly) return spErr(body, r);
     var m = r.monthly, MN = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
     var cell = function (v) { if (v == null) return '<td></td>'; var a = Math.min(1, Math.abs(v) / 40), col = v >= 0 ? 'rgba(8,153,129,' + (0.15 + a * 0.75) + ')' : 'rgba(242,54,69,' + (0.15 + a * 0.75) + ')'; return '<td style="background:' + col + '">' + (v > 0 ? '+' : '') + v.toFixed(1) + '%</td>'; };
@@ -1406,6 +1412,7 @@ function spMonthly(body, src) {
 function spRainbow(body, src) {
   src('自行以對數迴歸計算（2014 年起週 K）');
   run('webChain', ['rainbow'], function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     if (!r || r.error) return spErr(body, r);
     body.innerHTML = '<div class="spcard"><div id="spRbInfo"></div><div id="spRb" style="height:min(62vh,560px);position:relative"></div><div class="lgd" style="margin-top:6px">' + r.names.map(function (n) { return '<span><i style="background:' + n[1] + '"></i>' + n[0] + '</span>'; }).join('') + '</div></div>';
     var now = r.now; $('spRbInfo').innerHTML = '<div style="margin-bottom:6px">目前價格 <b>$' + fmt(now.price, 0) + '</b> 位於 <b style="color:' + now.color + '">第 ' + (now.band + 1) + '／9 帶「' + now.name + '」</b>・迴歸中線約 $' + fmt(now.fair, 0) + '</div>';
@@ -1421,6 +1428,7 @@ function spRainbow(body, src) {
 function spEtf(body, src) {
   src('資料：bitcoin-data.com（BGeometrics）');
   run('webChain', ['etf'], function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     if (!r || r.error) return spErr(body, Object.assign({ link: 'https://farside.co.uk/bitcoin-etf-flow-all-data/' }, r));
     var f = r.flow, col = spCol(f, /total|flow|net/i), data = spSer(f, col), LC = LightweightCharts, cum = 0;
     var last = data[data.length - 1], wk = data.slice(-5).reduce(function (a, x) { return a + x.value; }, 0), mo = data.slice(-22).reduce(function (a, x) { return a + x.value; }, 0);
@@ -1438,6 +1446,7 @@ function spEtf(body, src) {
 function spMvrv(body, src) {
   src('資料：bitcoin-data.com／blockchain.com');
   run('webChain', ['mvrv'], function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     if (!r || r.error) return spErr(body, r);
     var mcol = spCol(r.mvrv, /mvrv|^v$/i), mv = spSer(r.mvrv, mcol), z = r.z ? spSer(r.z, spCol(r.z, /z/i)) : null, LC = LightweightCharts, last = mv[mv.length - 1], zl = z && z[z.length - 1];
     var zone = last.value > 3.5 ? ['過熱（歷史頂部區）', '#f23645'] : last.value > 2.4 ? ['偏熱', '#ff9800'] : last.value < 1 ? ['低估（歷史底部區）', '#089981'] : ['合理', '#2962ff'];
@@ -1460,6 +1469,7 @@ function spRhodl(body, src) {
 function spFng(body, src) {
   src('資料：alternative.me');
   fetch('https://api.alternative.me/fng/?limit=365').then(function (x) { return x.json(); }).then(function (j) {
+    if (!body.isConnected) return;
     var a = (j.data || []).slice().reverse(), last = a[a.length - 1], zh = { 'Extreme Fear': '極度恐懼', 'Fear': '恐懼', 'Neutral': '中性', 'Greed': '貪婪', 'Extreme Greed': '極度貪婪' }, v = +last.value;
     var col = v < 25 ? '#f23645' : v < 45 ? '#ff9800' : v < 55 ? '#c0ca33' : v < 75 ? '#43a047' : '#089981';
     body.innerHTML = '<div class="spcard"><div style="display:flex;align-items:center;gap:16px"><div class="fngc" style="border-color:' + col + '"><b style="color:' + col + '">' + v + '</b><span>' + (zh[last.value_classification] || last.value_classification) + '</span></div><div class="note">0～24 極度恐懼、25～44 恐懼、45～54 中性、55～74 貪婪、75～100 極度貪婪。<br>「別人恐懼時貪婪」：極度恐懼常是中長線買點，極度貪婪要留意追高風險。</div></div><div id="spFg" style="height:min(50vh,420px);position:relative;margin-top:10px"></div></div>';
@@ -1483,6 +1493,7 @@ function spLiq(body, src) {
   } catch (e) {}
   draw();
   run('webChain', ['liq'], function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     var el = $('lqDay'); if (!el) return; if (!r || r.error) { el.innerHTML = '<div class="note" style="padding:10px">' + ((r && r.error) || '每日資料暫時抓不到') + '</div>'; return; }
     el.innerHTML = ''; var l = r.liq, kL = Object.keys(l.cols).filter(function (k) { return /long/i.test(k); })[0], kS = Object.keys(l.cols).filter(function (k) { return /short/i.test(k); })[0];
     var ch = spChart(el), LC = LightweightCharts;
@@ -1497,6 +1508,7 @@ function spLiq(body, src) {
 function spFed(body, src) {
   src('推算：CME 聯邦基金期貨（Yahoo）・FRED');
   var go = function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     if (!r || r.error || !r.meetings) return spErr(body, r);
     var i0 = 0, render = function () {
       var m = r.meetings[i0], mx = Math.max.apply(null, m.probs.map(function (p) { return p.p; }));
@@ -1514,6 +1526,7 @@ function spFed(body, src) {
 function spFred(body, src, id) {
   src('資料：FRED（聖路易聯邦準備銀行）');
   run('webFred', [id], function (r) {
+    if (!body.isConnected) return;   // 已經切到別的圖表
     if (!r || r.error) return spErr(body, r);
     var s = r.s, L = s.v.length - 1, LC = LightweightCharts;
     body.innerHTML = '<div class="spcard"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><b style="font-size:1.4em">' + spNum(s.v[L], r) + '</b><span class="note">' + new Date(s.t[L] * 1000).toISOString().slice(0, 10) + (L ? '・前值 ' + spNum(s.v[L - 1], r) : '') + '</span></div><div class="note" style="margin:6px 0">' + r.desc + '</div>' +
@@ -1530,12 +1543,14 @@ function spFred(body, src, id) {
 
 /* ===== 多張圖表：左[美股・國際]、中[加密貨幣]、右[台股] 三欄往下排（手機左右滑動切換欄）===== */
 var GR = { on: false, cards: {}, ws: [], timer: null, data: {}, sync: false };
-var GCOLS = [['u', '🇺🇸 美股・國際'], ['c', '₿ 加密貨幣'], ['t', '🇹🇼 台股']];
+var GCOLS = [['u', '🇺🇸 美股・國際'], ['c', '₿ 加密貨幣'], ['t', '🇹🇼 台股'], ['m', '🛢️ 原物料'], ['o', '⛓️ 鏈上數據']];
+function gIsCmd(k) { return /=F$/.test(k) && !/^(NQ|ES|YM|RTY|NKD|VX|DX)=F$/.test(k) || /^(XAU|XAG|XPT|XPD|XCU|WTI|BRENT|NATGAS)\.P$/i.test(k); }
+function gColsOn(by) { return GCOLS.filter(function (c) { return /[uct]/.test(c[0]) || by[c[0]].length; }); }
 var GIND = [['boll', 'BOLL', 1], ['ma', 'MA', 1], ['ema', 'EMA 7/25/99', 1], ['vegas', '維加斯通道', 1], ['bmsb', '牛市支撐帶', 1], ['mk', '金叉／死叉', 1], ['rsi', 'RSI', 2], ['macd', 'MACD', 2], ['vol', '成交量', 2], ['cd', 'K 棒倒數', 3]];
 function gInd() { var g = P.gind2; if (!g) { var o = P.gind || {}; g = { boll: o.main ? (o.main === 'boll' ? 1 : 0) : 1, ma: o.main === 'ma' ? 1 : 0, ema: o.main === 'ema' ? 1 : 0, vegas: o.main === 'vegas' ? 1 : 0, bmsb: 0, mk: 0, rsi: o.rsi == null ? 1 : o.rsi, macd: o.macd == null ? 1 : o.macd, vol: o.vol || 0, cd: 1 }; } return g; }
 function gIsTv(k) { return /^CRYPTOCAP:/.test(k); }
 function gTvName(k) { var b = k.replace(/^CRYPTOCAP:/, ''), cx = MK.crypto && MK.crypto.cx, x = cx && cx.filter(function (o) { return o.key === k; })[0]; return b + (x ? ' ' + x.sub : { 'BTC.D': ' 比特幣市佔率', 'ETH.D': ' 以太幣市佔率', 'USDT.D': ' 泰達幣市佔率', TOTAL: ' 加密總市值', TOTAL2: ' 總市值（不含 BTC）', TOTAL3: ' 總市值（不含 BTC、ETH）' }[b] || ''); }
-function gColOf(k) { if (gIsTv(k)) return 'c'; var m = (P.gmeta || {})[k]; if (m) return m; return /^\d{4,6}[A-Z]?$|\.TWO?$|^\^TWII$|^\^TWOII$/.test(k) ? 't' : /\.P$|-USD$|USDT$|^(BTC|ETH|SOL|BNB|XRP|DOGE|ADA|TRX|AVAX|LINK|DOT|LTC|SHIB|PEPE|SUI|TON|TRUMP)$/i.test(k) ? 'c' : 'u'; }
+function gColOf(k) { if (gIsTv(k)) return 'o'; if (gIsCmd(k)) return 'm'; var m = (P.gmeta || {})[k]; if (m) return m; return /^\d{4,6}[A-Z]?$|\.TWO?$|^\^TWII$|^\^TWOII$/.test(k) ? 't' : /\.P$|-USD$|USDT$|^(BTC|ETH|SOL|BNB|XRP|DOGE|ADA|TRX|AVAX|LINK|DOT|LTC|SHIB|PEPE|SUI|TON|TRUMP)$/i.test(k) ? 'c' : 'u'; }
 function gList() { var l = P.grid && P.grid.length ? P.grid : null; if (!l) { l = (W && W.list ? W.list.filter(function (x) { return x.sym; }).map(function (x) { return x.key; }) : []).slice(0, 12); if (!l.length) l = ['NVDA', '^GSPC', 'BTC.P', 'ETH.P', '2330', '^TWII']; } return l.slice(0, 36); }
 function gOpen() {
   GR.on = true; P.gridOn = 1; save_(true); document.body.classList.add('gridmode'); $('grid').style.display = 'flex';
@@ -1550,15 +1565,16 @@ function gClose(key) {
 function gStop() { GR.ws.forEach(function (w) { try { w.onclose = null; w.close(); } catch (e) {} }); GR.ws = []; clearInterval(GR.timer); GR.timer = null; }
 function gLoad() {
   gStop(); Object.keys(GR.cards).forEach(function (k) { try { GR.cards[k].chart.remove(); } catch (e) {} }); GR.cards = {};
-  var list = gList(), tf = P.gtf || '15m', by = { u: [], c: [], t: [] };
+  var list = gList(), tf = P.gtf || '15m', by = { u: [], c: [], t: [], m: [], o: [] };
   list.forEach(function (k) { by[gColOf(k)].push(k); });
   var idx = 0;
-  $('gBody').innerHTML = GCOLS.map(function (c) {
+  var COLS = gColsOn(by); $('gBody').style.gridTemplateColumns = innerWidth < 820 ? '' : 'repeat(' + COLS.length + ', minmax(' + (COLS.length > 3 ? 320 : 0) + 'px, 1fr))';
+  $('gBody').innerHTML = COLS.map(function (c) {
     return '<div class="gcol" id="gcol_' + c[0] + '"><div class="gch">' + c[1] + ' <span class="note">(' + by[c[0]].length + ')</span></div>' + (by[c[0]].length ? by[c[0]].map(function (k) {
       var i = idx++; return '<div class="gcard" id="gc' + i + '" data-k="' + k + '"><div class="ghead"><span class="gname" data-k="' + k + '">' + k + '</span><span class="gtag"></span><b class="gpx"></b><span class="gpc"></span><span class="gcd note" style="margin-left:auto"></span></div><div class="glg note"></div><div class="gchart"><div class="note" style="padding:20px">⏳ 載入中…</div></div></div>';
     }).join('') : '<div class="note" style="padding:20px">這一欄還沒有商品，按 ✎ 編輯加入</div>') + '</div>';
   }).join('');
-  $('gTabs').innerHTML = GCOLS.map(function (c, i) { return '<button data-i="' + i + '"' + (i === 1 ? ' class="on"' : '') + '>' + c[1] + '</button>'; }).join('');
+  $('gTabs').innerHTML = COLS.map(function (c, i) { return '<button data-i="' + i + '"' + (i === 1 ? ' class="on"' : '') + '>' + c[1] + '</button>'; }).join('');
   each('#gTabs button', function (b) { b.onclick = function () { var col = $('gBody').children[+b.getAttribute('data-i')]; $('gBody').scrollTo({ left: col.offsetLeft, behavior: 'smooth' }); }; });
   if (innerWidth < 820) setTimeout(function () { var col = $('gcol_c'); if (col) $('gBody').scrollLeft = col.offsetLeft; }, 50);
   each('#gBody .gname', function (el) { el.onclick = function () { gClose(el.getAttribute('data-k')); }; });
@@ -1572,7 +1588,7 @@ function gLoad() {
   for (var i = 0, n = 0; i < need.length; i += 8, n++) (function (part, last) {   // 每 8 個一批，先到先畫
     run('webBars', [part, tf], function (r) {
       if (!GR.on) return; var meta = P.gmeta || {}, moved = false;
-      (r || []).forEach(function (d) { d.at = Date.now(); GR.data[d.key] = d; if (!d.error) { var col = d.market === 'CRYPTO' ? 'c' : d.market === 'TW' ? 't' : 'u'; if (meta[d.key] !== col) { meta[d.key] = col; moved = true; } } gDraw(d.key, d); });
+      (r || []).forEach(function (d) { d.at = Date.now(); GR.data[d.key] = d; if (!d.error) { var col = gIsCmd(d.key) ? 'm' : d.market === 'CRYPTO' ? 'c' : d.market === 'TW' ? 't' : 'u'; if (meta[d.key] !== col) { meta[d.key] = col; moved = true; } } gDraw(d.key, d); });
       if (moved) { P.gmeta = meta; save_(true); }
       if (last) done();
     });
@@ -1616,18 +1632,18 @@ function gDraw(k, d) {
   ms.setData(s.t.map(function (t, j) { return { time: t, open: s.o[j], high: s.h[j], low: s.l[j], close: s.c[j] }; }));
   if (o.mk && LC.createSeriesMarkers) LC.createSeriesMarkers(ms, o.mk.slice(-15));
   var L = function (arr, color, pane, w) { var x = ch.addSeries(LC.LineSeries, { color: color, lineWidth: w || 1.3, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider: pane ? undefined : function () { return null; }, priceFormat: pane ? { type: 'price', precision: 2, minMove: 0.01 } : pf }, pane || 0); x.setData(s.t.map(function (t, j) { return arr[j] == null ? { time: t } : { time: t, value: arr[j] }; })); return x; };
-  o.lines.forEach(function (x) { L(x[0], x[1], 0); });
+  var sr = { lines: o.lines.map(function (x) { return L(x[0], x[1], 0); }) };
   var p = 1;
   if (g.vol) { var vs = ch.addSeries(LC.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, p++); vs.setData(s.t.map(function (t, j) { return { time: t, value: s.v[j] || 0, color: (s.c[j] >= s.o[j] ? up : dn) + '88' }; })); }
-  if (g.rsi) { var rs = L(o.rsi, '#f7c948', p, 1.3); [70, 30].forEach(function (v) { rs.createPriceLine({ price: v, color: tx, lineStyle: 2, lineWidth: 1, axisLabelVisible: true }); }); p++; }
-  if (g.macd) { var hs = ch.addSeries(LC.HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, p); hs.setData(s.t.map(function (t, j) { var v = o.osc[j]; return v == null ? { time: t } : { time: t, value: v, color: v >= 0 ? up : dn }; })); L(o.dif, '#f7c948', p); L(o.dea, '#e040fb', p); p++; }
+  if (g.rsi) { var rs = L(o.rsi, '#f7c948', p, 1.3); sr.rsi = rs; [70, 30].forEach(function (v) { rs.createPriceLine({ price: v, color: tx, lineStyle: 2, lineWidth: 1, axisLabelVisible: true }); }); p++; }
+  if (g.macd) { var hs = ch.addSeries(LC.HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, p); hs.setData(s.t.map(function (t, j) { var v = o.osc[j]; return v == null ? { time: t } : { time: t, value: v, color: v >= 0 ? up : dn }; })); sr.osc = hs; sr.dif = L(o.dif, '#f7c948', p); sr.dea = L(o.dea, '#e040fb', p); p++; }
   try { var ps = ch.panes(); ps[0].setStretchFactor(Math.max(1, (ps.length - 1) * 2.6)); for (var j = 1; j < ps.length; j++) ps[j].setStretchFactor(1); } catch (e) {}
   var bars = innerWidth < 820 ? 60 : 90;
   if (GR.off) ch.timeScale().setVisibleLogicalRange({ from: s.t.length - GR.off[0], to: s.t.length - GR.off[1] });
   else ch.timeScale().setVisibleLogicalRange({ from: Math.max(0, s.t.length - bars), to: s.t.length + 3 });
-  var card = { chart: ch, ms: ms, d: d, o: o, el: el, key: k };
+  var card = { chart: ch, ms: ms, d: d, o: o, el: el, key: k, sr: sr, up: up, dn: dn };
   GR.cards[k] = card; gHead(card);
-  ch.subscribeCrosshairMove(function (pr) { var q = pr && pr.logical != null ? Math.round(pr.logical) : -1; gLeg(card, q >= 0 && q < s.t.length ? q : -1); });
+  ch.subscribeCrosshairMove(function (pr) { var q = pr && pr.logical != null ? Math.round(pr.logical) : -1; card.hover = q >= 0 && q < s.t.length; gLeg(card, card.hover ? q : -1); });
   /* 拖曳／縮放其中一張，所有圖表一起跟著移動（以「距離最新一根」對齊） */
   ch.timeScale().subscribeVisibleLogicalRangeChange(function (r) {
     if (GR.sync || !r || !card.user) return; GR.sync = true;
@@ -1654,15 +1670,32 @@ function gLeg(cd, k) {
 /* 即時：加密貨幣用 Binance 合併串流（每筆成交，畫面每 0.25 秒更新）；股票每 5 秒 */
 function gLive(list) {
   var tf = P.gtf || '15m', iv = BNIV[tf], spot = [], fut = [], map = {};
-  list.forEach(function (d) { if (d.error || d.market !== 'CRYPTO') return; var b = String(d.code).replace(/\.P$/, '').replace(/\d+$/, '').toLowerCase(); if (/^(usdt|usdc)$/.test(b)) return; var st = b + 'usdt@kline_' + iv; (d.perp ? fut : spot).push(st); map[(d.perp ? 'f:' : 's:') + st] = (map[(d.perp ? 'f:' : 's:') + st] || []).concat([d.key]); });
-  [['s:', spot, 'wss://stream.binance.com:9443/stream?streams='], ['f:', fut, 'wss://fstream.binance.com/stream?streams=']].forEach(function (x) {
-    if (!x[1].length) return;
-    try {
-      var ws = new WebSocket(x[2] + x[1].join('/')); GR.ws.push(ws);
-      ws.onmessage = function (ev) { var m = JSON.parse(ev.data), k = m.data && m.data.k, keys = map[x[0] + m.stream]; if (k && keys) keys.forEach(function (key) { gBar(key, { t: k.t / 1000 + 8 * 3600, o: +k.o, h: +k.h, l: +k.l, c: +k.c }); }); };
-    } catch (e) {}
+  list.forEach(function (d) {
+    if (d.error || d.market !== 'CRYPTO') return; var b = String(d.code).replace(/\.P$/, '').replace(/-USD$/, '').toLowerCase(); if (!d.perp) b = b.replace(/\d+$/, ''); if (/^(usdt|usdc)$/.test(b)) return;
+    var st = b + 'usdt', kk = (d.perp ? 'f:' : 's:') + st; if (!map[kk]) { map[kk] = []; (d.perp ? fut : spot).push(st + '@kline_' + iv, st + '@ticker', st + '@aggTrade'); } map[kk].push(d.key);
   });
-  var stocks = list.filter(function (d) { return !d.error && d.market !== 'CRYPTO'; }).map(function (d) { return d.key; }), sec = 0;
+  var open = function (pre, streams, url) {
+    if (!streams.length || !GR.on) return;
+    try {
+      var ws = new WebSocket(url + streams.join('/')); GR.ws.push(ws);
+      ws.onmessage = function (ev) {
+        var m = JSON.parse(ev.data), x = m.data; if (!x || !m.stream) return; var keys = map[pre + m.stream.split('@')[0]]; if (!keys) return;
+        keys.forEach(function (key) {
+          var cd = GR.cards[key]; if (!cd) return; var s = cd.d, n = s.t.length - 1;
+          if (x.e === 'kline') { var k = x.k; cd.live = true; gBar(key, { t: k.t / 1000 + 8 * 3600, o: +k.o, h: +k.h, l: +k.l, c: +k.c }); }
+          else if (x.e === '24hrTicker') { s.q = s.q || {}; if (+x.o) s.q.prev = +x.o; }   // 24 小時漲跌和 Binance 同一個基準
+          else if (x.e === 'aggTrade') {   // 逐筆成交，合併到畫面更新頻率
+            var tt = x.T / 1000 + 8 * 3600; if (!cd.live || tt < s.t[n] || tt >= s.t[n] + TFSEC[s.tf]) return; cd.trP = +x.p;
+            if (!cd.trRaf) cd.trRaf = requestAnimationFrame(function () { cd.trRaf = 0; var s1 = cd.d, n1 = s1.t.length - 1, p = cd.trP; gBar(key, { t: s1.t[n1], o: s1.o[n1], h: Math.max(s1.h[n1], p), l: Math.min(s1.l[n1], p), c: p }); });
+          }
+        });
+      };
+      ws.onclose = function () { if (GR.on) setTimeout(function () { if (GR.on) open(pre, streams, url); }, 2000); };   // 斷線自動重連
+    } catch (e) {}
+  };
+  for (var i = 0; i < spot.length; i += 180) open('s:', spot.slice(i, i + 180), 'wss://stream.binance.com:9443/stream?streams=');
+  for (var j = 0; j < fut.length; j += 180) open('f:', fut.slice(j, j + 180), 'wss://fstream.binance.com/stream?streams=');
+  var stocks = list.filter(function (d) { return !d.error && d.market !== 'CRYPTO' && !gIsTv(d.key); }).map(function (d) { return d.key; }), sec = 0;
   GR.timer = setInterval(function () {
     if (document.hidden || !GR.on) return; if (gInd().cd) gCountdown(); else each('#gBody .gcd', function (e) { e.textContent = ''; });
     if (stocks.length && ++sec % 5 === 0) run('webQuotes', [stocks], function (q) { stocks.forEach(function (k) { var cd = GR.cards[k]; if (!cd || !q[cd.d.sym]) return; var x = q[cd.d.sym], s = cd.d, n = s.c.length - 1; cd.d.q = Object.assign(cd.d.q || {}, x); gBar(k, { t: s.t[n], o: s.o[n], h: Math.max(s.h[n], x.price), l: Math.min(s.l[n], x.price), c: x.price, keepQ: true }); }); }, true);
@@ -1670,12 +1703,22 @@ function gLive(list) {
 }
 function gBar(key, k) {
   var cd = GR.cards[key]; if (!cd) return; var s = cd.d, n = s.c.length - 1;
-  if (k.t > s.t[n]) { if (k.t - s.t[n] > TFSEC[s.tf] * 3) return; s.t.push(k.t); s.o.push(k.o); s.h.push(k.h); s.l.push(k.l); s.c.push(k.c); s.v.push(0); n++; ['rsi', 'dif', 'dea', 'osc'].forEach(function (x) { cd.o[x].push(null); }); cd.o.lines.forEach(function (x) { x[0].push(null); }); }
+  if (k.t > s.t[n]) { s.t.push(k.t); s.o.push(k.o); s.h.push(k.h); s.l.push(k.l); s.c.push(k.c); s.v.push(0); n++; ['rsi', 'dif', 'dea', 'osc'].forEach(function (x) { cd.o[x].push(null); }); cd.o.lines.forEach(function (x) { x[0].push(null); }); }
   else if (k.t === s.t[n]) { s.h[n] = Math.max(s.h[n], k.h); s.l[n] = Math.min(s.l[n], k.l); s.c[n] = k.c; }
   else return;
   try { cd.ms.update({ time: s.t[n], open: s.o[n], high: s.h[n], low: s.l[n], close: s.c[n] }); } catch (e) {}
-  if (!k.keepQ && s.q && s.q.prev) { s.q.price = k.c; s.q.chg = k.c - s.q.prev; s.q.pct = s.q.chg / s.q.prev * 100; }
-  var now = Date.now(); if (now - (cd.lt || 0) > 250) { cd.lt = now; gHead(cd); }
+  if (!k.keepQ) { s.q = s.q || {}; s.q.price = k.c; if (s.q.prev) { s.q.chg = k.c - s.q.prev; s.q.pct = s.q.chg / s.q.prev * 100; } }
+  var now = Date.now(); if (now - (cd.lt || 0) > 100) { cd.lt = now; gHead(cd); }
+  if (now - (cd.li || 0) > 700) { cd.li = now; gLiveInd(cd); }
+}
+function gLiveInd(cd) {   // 指標跟著最新價重算（每 0.7 秒）
+  try {
+    var d = cd.d, o = gCalc(d), sr = cd.sr, n = d.t.length - 1, t = d.t[n], put = function (ser, a) { if (ser && a) for (var i = n; i <= n; i++) ser.update(a[i] == null ? { time: d.t[i] } : { time: d.t[i], value: a[i] }); };
+    (sr.lines || []).forEach(function (ser, i) { if (o.lines[i]) put(ser, o.lines[i][0]); });
+    put(sr.rsi, o.rsi); put(sr.dif, o.dif); put(sr.dea, o.dea);
+    if (sr.osc) for (var i = n; i <= n; i++) { var v = o.osc[i]; sr.osc.update(v == null ? { time: d.t[i] } : { time: d.t[i], value: v, color: v >= 0 ? cd.up : cd.dn }); }
+    o.mk = cd.o.mk; cd.o = o; if (!cd.hover) gLeg(cd, -1);
+  } catch (e) {}
 }
 function gCountdown() {
   Object.keys(GR.cards).forEach(function (k) {
@@ -1697,7 +1740,7 @@ function gIndPop() {
 /* 編輯：上半部是「多張圖表」清單（依三欄分組，可拖曳排序、置頂、刪除），下半部是可加入的候選清單 */
 var GSRC = 'watch';
 function gEdit() {
-  var list = gList(), by = { u: [], c: [], t: [] }; list.forEach(function (k) { by[gColOf(k)].push(k); });
+  var list = gList(), by = { u: [], c: [], t: [], m: [], o: [] }; list.forEach(function (k) { by[gColOf(k)].push(k); });
   var nm = function (k) { if (gIsTv(k)) return gTvName(k); var d = GR.data[k]; return d && d.title ? d.title : k; };
   $('gEditPop').innerHTML = '<div style="display:flex;align-items:center;gap:8px"><h4 style="margin:0;flex:1">✎ 編輯多張圖表（' + list.length + '／36）</h4><button id="gEdClose">✕ 完成</button></div>' +
     '<div class="note" style="margin:6px 0">按住右邊 ☰ 拖曳排序、⤒ 置頂、✕ 移除；商品會自動放進對應的欄（美股・國際／加密貨幣／台股）。</div>' +
@@ -1723,13 +1766,13 @@ function gEdit() {
     };
   });
   /* 候選清單：自選、美股、台股、加密、永續（已加入的打勾） */
-  var srcs = [['watch', '⭐ 自選'], ['us', '美股'], ['tw', '台股'], ['crypto', '加密貨幣'], ['perp', '永續合約'], ['idx', '指數'], ['cmd', '原物料']];
+  var srcs = [['watch', '⭐ 自選'], ['us', '美股'], ['tw', '台股'], ['crypto', '加密貨幣'], ['perp', '永續合約'], ['cmd', '原物料'], ['chain', '鏈上數據'], ['idx', '指數'], ['fx', '外匯']];
   var showSrc = function () {
     $('gSrcTabs').innerHTML = srcs.map(function (x) { return '<button class="' + (x[0] === GSRC ? 'on' : '') + '" data-s="' + x[0] + '">' + x[1] + '</button>'; }).join('');
     each('#gSrcTabs button', function (b) { b.onclick = function () { GSRC = b.getAttribute('data-s'); showSrc(); }; });
-    var m = MK[GSRC], have = gList();
+    var m = GSRC === 'chain' ? { rows: [], cx: CHAIN_ROWS.filter(function (r) { return r[0] === 'tv'; }).map(function (r) { return { key: r[1], name: r[2], sub: r[3].replace(/・?TradingView.*$/, '') || '市場指標' }; }) } : MK[GSRC], have = gList();
     if (!m) { $('gSrc').innerHTML = '<div class="note" style="padding:10px">⏳ 載入中…</div>'; var c0 = GSRC; if (c0 === 'watch') run('webWatch', [TOKEN], function (w) { W = w; MK.watch = { rows: w.list, at: Date.now() }; if (GSRC === c0) showSrc(); }, true); else run('webMarkets', [c0], function (r) { r.at = Date.now(); MK[c0] = r; if (GSRC === c0) showSrc(); }, true); return; }
-    var cxr = GSRC === 'crypto' && m.cx ? m.cx.map(function (x) { var on = have.indexOf(x.key) >= 0; return '<div class="gerow"><span style="flex:1;min-width:0"><b>' + x.name + '</b> <span class="note">' + x.sub + '・TradingView</span></span><button class="ebtn gsadd" data-k="' + x.key + '"' + (on ? ' disabled' : '') + '>' + (on ? '✓ 已加入' : '＋') + '</button></div>'; }).join('') : '';
+    var cxr = (GSRC === 'crypto' || GSRC === 'chain') && m.cx ? m.cx.map(function (x) { var on = have.indexOf(x.key) >= 0; return '<div class="gerow"><span style="flex:1;min-width:0"><b>' + x.name + '</b> <span class="note">' + x.sub + '・TradingView</span></span><button class="ebtn gsadd" data-k="' + x.key + '"' + (on ? ' disabled' : '') + '>' + (on ? '✓ 已加入' : '＋') + '</button></div>'; }).join('') : '';
     $('gSrc').innerHTML = cxr + (m.idx || []).concat(m.rows || []).filter(function (r) { return r.sym; }).map(function (r) { var on = have.indexOf(r.key) >= 0; return '<div class="gerow"><span style="flex:1;min-width:0"><b>' + (/^(US|CRYPTO)$/.test(mk(r)) ? r.sub : r.name) + '</b> <span class="note">' + (/^(US|CRYPTO)$/.test(mk(r)) ? r.name : r.sub) + '</span></span><span class="' + cls(r.pct) + '" style="font-size:.85em">' + pct(r.pct) + '</span><button class="ebtn gsadd" data-k="' + r.key + '"' + (on ? ' disabled' : '') + '>' + (on ? '✓ 已加入' : '＋') + '</button></div>'; }).join('') || '<div class="note">清單是空的</div>';
     each('#gSrc .gsadd', function (b) { b.onclick = function () { add(b.getAttribute('data-k')); }; });
   };
@@ -1766,7 +1809,7 @@ function renderCats() {
 }
 function setCat(c) {
   var parts = String(c).split('-'); c = parts[0]; if (parts[1]) SORT[c] = parts[1];
-  CAT = c; renderCats(); lvSync(); if (P.cat !== c) { P.cat = c; save_(true); }
+  CAT = c; renderCats(); lvSync(); if (P.cat !== c && !PREVIEW) { P.cat = c; save_(true); }
   if (spIsCat(c)) { spList(c); return; }
   var m = MK[c];
   if (m) renderList(m);
@@ -2047,14 +2090,29 @@ applyTheme(); $('ctype').value = P.ctype; if (P.bmin && innerWidth >= 820 && !VI
 if (VIEW0 && BT.some(function (b) { return b[0] === VIEW0; })) BTAB = VIEW0; else if (P.btab && BT.some(function (b) { return b[0] === P.btab; })) BTAB = P.btab;
 if (P.draws && !Object.keys(DRAWS).length) DRAWS = P.draws;   // 從卡片的「大趨勢／新聞／AI 解讀」按鈕開啟 → 直接到該分頁
 renderTabs();
-var SYM0 = SYM;
+var SYM0 = SYM, PREVIEW = SYM0 || null, PREV = SYM0 ? { last: P.last, cat: P.cat, grid: P.gridOn } : null;
+function hideBack() { var b = $('backChip'); if (b) b.remove(); }
+function showBack() {   // 從 LINE 卡片打開時，提供「回到上次的畫面」
+  hideBack(); if (!PREV || !PREV.last || !PREV.last.s) return;
+  if (String(PREV.last.s).toUpperCase() === String(SYM0).toUpperCase() && !PREV.grid) return;
+  var tfn = (TFS.filter(function (x) { return x[0] === PREV.last.tf; })[0] || [0, PREV.last.tf])[1];
+  var b = document.createElement('div'); b.id = 'backChip';
+  b.innerHTML = '<button id="bkGo">↩ 回到上次的畫面（' + String(PREV.last.s).replace(/^\^/, '') + '・' + tfn + (PREV.grid ? '・多張圖表' : '') + '）</button><button id="bkX" title="關閉">✕</button>';
+  document.body.appendChild(b);
+  $('bkGo').onclick = function () {
+    var p = PREV; PREVIEW = null; hideBack();
+    try { history.replaceState(null, '', location.href.replace(/([?&])(s|tf|c|v)=[^&]*/g, '$1').replace(/[?&]+$/, '').replace(/\?&+/, '?')); } catch (e) {}
+    if (p.cat) setCat(p.cat); load(p.last.s, p.last.tf); if (p.grid) setTimeout(gOpen, 300);
+  };
+  $('bkX').onclick = hideBack;
+}
 if (!SYM && P.last && P.last.s) { SYM = P.last.s; if (!TFP) TF = P.last.tf || TF; }   // 沒指定商品 → 打開上次看的商品與週期
 else if (!TFP && P.dtf) TF = P.dtf;   // 指定商品但沒指定週期 → 用你設定的預設週期
 var startCat = CAT0 || (SYM0 ? '' : P.cat || 'watch');
 run('webWatch', [TOKEN], function (w) {
   W = w; MK.watch = { rows: w.list, at: Date.now() };
   if (w.pref) {
-    var oldTf = TF, lp = P; P = merge_(w.pref);
+    var oldTf = TF, lp = P; if (SYM0 && w.pref.last) PREV = { last: w.pref.last, cat: w.pref.cat, grid: w.pref.gridOn }; P = merge_(w.pref); if (PREVIEW) { if (PREV) { P.last = PREV.last; P.cat = PREV.cat; } showBack(); }
     if (w.pref.draws) { DRAWS = w.pref.draws; try { localStorage.setItem('iaDraw', JSON.stringify(DRAWS)); } catch (e) {} }   // 畫線跟著帳號，換裝置也看得到
     if (!SYM0 && P.last && P.last.s && !USERTF && (String(P.last.s).toUpperCase() !== String(SYM).toUpperCase() || P.last.tf !== TF)) load(P.last.s, P.last.tf);
     else if (SYM0 && !TFP && P.dtf && P.dtf !== oldTf && !USERTF) load(null, P.dtf);
@@ -2064,7 +2122,8 @@ run('webWatch', [TOKEN], function (w) {
 }, true);
 SPLIT_BIND(); gBind();
 if (startCat) setCat(startCat);
-if (P.gridOn && !SYM0) setTimeout(gOpen, 600);   // 上次停在多張圖表 → 直接打開
+if (P.gridOn && !SYM0) setTimeout(gOpen, 600);
+if (PREV) setTimeout(function () { if (PREVIEW && !$('backChip')) showBack(); }, 1500);   // 上次停在多張圖表 → 直接打開
 if (P.split > 1) setTimeout(function () { toggleSplit(Math.min(+P.split, innerWidth < 820 ? 2 : 4)); setAct('A'); }, 800);
 load(SYM || ({ us: '^GSPC', tw: '^TWII', crypto: 'BTC', fx: 'TWD=X', idx: 'DXY', cmd: 'GC=F' }[String(CAT0).split('-')[0]] || '2330'), TF);
 window.addEventListener('resize', function () { if (D && chart) { /* autoSize 會自動調整 */ } });
