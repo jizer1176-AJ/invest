@@ -138,14 +138,17 @@
   .gchart { height:380px; position:relative; }
   .gerow { display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--ln); }
   .gtop, .gdh { cursor:pointer; color:var(--sb); padding:0 6px; font-size:1.15em; touch-action:none; }
-  .gerow.drag { outline:1px dashed var(--ac); background:var(--pn2); }
+  .gerow.drag { outline:1px dashed var(--ac); background:var(--pn2); opacity:.35; }
+  .gghost { position:fixed; z-index:9999; pointer-events:none; opacity:.92; background:var(--pn); border:1px solid var(--ac); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.45); transform:scale(1.02); }
+  .gerow .gx { color:var(--sb); padding:4px 6px; cursor:pointer; border-radius:6px; } .gerow .gx:hover { color:#ef5350; background:var(--pn2); }
+  .gerow .gtop, .gerow .gdh { padding:4px 6px; cursor:pointer; border-radius:6px; } .gerow .gdh { cursor:grab; touch-action:none; }
   .gsug { position:absolute; top:100%; left:0; right:0; z-index:5; background:var(--pn); border:1px solid var(--ln); border-radius:8px; display:none; max-height:40vh; overflow:auto; }
   @media (max-width: 820px) {
     #gTabs { display:flex; }
     #gBody { display:flex; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; }
     .gcol { flex:0 0 100%; scroll-snap-align:start; overflow-y:auto; height:100%; border-right:0; }
     .gch { display:none; }
-    .gchart { height:calc((100vh - 120px) / 3 - 52px); min-height:150px; }   /* 一個畫面放得下三張 */
+    .gchart { height:calc((100vh - 120px) / 2 - 56px); min-height:220px; }   /* 一個畫面放兩張，其餘往下滑 */
   }
   #tip { position:fixed; z-index:70; width:min(320px,90vw); background:var(--pn); border:1px solid var(--ln); border-radius:10px; padding:10px 12px; box-shadow:0 8px 30px rgba(0,0,0,.35); display:none; font-size:.92em; }
   .fup { animation:fu .6s; } .fdn { animation:fd .6s; }
@@ -925,7 +928,9 @@ var GR = { on: false, cards: {}, ws: [], timer: null, data: {}, sync: false };
 var GCOLS = [['u', '🇺🇸 美股・國際'], ['c', '₿ 加密貨幣'], ['t', '🇹🇼 台股']];
 var GIND = [['boll', 'BOLL', 1], ['ma', 'MA', 1], ['ema', 'EMA 7/25/99', 1], ['vegas', '維加斯通道', 1], ['bmsb', '牛市支撐帶', 1], ['mk', '金叉／死叉', 1], ['rsi', 'RSI', 2], ['macd', 'MACD', 2], ['vol', '成交量', 2], ['cd', 'K 棒倒數', 3]];
 function gInd() { var g = P.gind2; if (!g) { var o = P.gind || {}; g = { boll: o.main ? (o.main === 'boll' ? 1 : 0) : 1, ma: o.main === 'ma' ? 1 : 0, ema: o.main === 'ema' ? 1 : 0, vegas: o.main === 'vegas' ? 1 : 0, bmsb: 0, mk: 0, rsi: o.rsi == null ? 1 : o.rsi, macd: o.macd == null ? 1 : o.macd, vol: o.vol || 0, cd: 1 }; } return g; }
-function gColOf(k) { var m = (P.gmeta || {})[k]; if (m) return m; return /^\d{4,6}[A-Z]?$|\.TWO?$|^\^TWII$|^\^TWOII$/.test(k) ? 't' : /\.P$|-USD$|USDT$|^(BTC|ETH|SOL|BNB|XRP|DOGE|ADA|TRX|AVAX|LINK|DOT|LTC|SHIB|PEPE|SUI|TON|TRUMP)$/i.test(k) ? 'c' : 'u'; }
+function gIsTv(k) { return /^CRYPTOCAP:/.test(k); }
+function gTvName(k) { var b = k.replace(/^CRYPTOCAP:/, ''), cx = MK.crypto && MK.crypto.cx, x = cx && cx.filter(function (o) { return o.key === k; })[0]; return b + (x ? ' ' + x.sub : { 'BTC.D': ' 比特幣市佔率', 'ETH.D': ' 以太幣市佔率', 'USDT.D': ' 泰達幣市佔率', TOTAL: ' 加密總市值', TOTAL2: ' 總市值（不含 BTC）', TOTAL3: ' 總市值（不含 BTC、ETH）' }[b] || ''); }
+function gColOf(k) { if (gIsTv(k)) return 'c'; var m = (P.gmeta || {})[k]; if (m) return m; return /^\d{4,6}[A-Z]?$|\.TWO?$|^\^TWII$|^\^TWOII$/.test(k) ? 't' : /\.P$|-USD$|USDT$|^(BTC|ETH|SOL|BNB|XRP|DOGE|ADA|TRX|AVAX|LINK|DOT|LTC|SHIB|PEPE|SUI|TON|TRUMP)$/i.test(k) ? 'c' : 'u'; }
 function gList() { var l = P.grid && P.grid.length ? P.grid : null; if (!l) { l = (W && W.list ? W.list.filter(function (x) { return x.sym; }).map(function (x) { return x.key; }) : []).slice(0, 12); if (!l.length) l = ['NVDA', '^GSPC', 'BTC.P', 'ETH.P', '2330', '^TWII']; } return l.slice(0, 36); }
 function gOpen() {
   GR.on = true; P.gridOn = 1; save_(true); document.body.classList.add('gridmode'); $('grid').style.display = 'flex';
@@ -953,9 +958,11 @@ function gLoad() {
   if (innerWidth < 820) setTimeout(function () { var col = $('gcol_c'); if (col) $('gBody').scrollLeft = col.offsetLeft; }, 50);
   each('#gBody .gname', function (el) { el.onclick = function () { gClose(el.getAttribute('data-k')); }; });
   var fresh = function (k) { var d = GR.data[k]; return d && d.tf === tf && Date.now() - (d.at || 0) < 180000; };
-  var cached = list.filter(fresh), need = list.filter(function (k) { return !fresh(k); });
+  list.filter(gIsTv).forEach(gTv);   // BTC.D、TOTAL2 這類用 TradingView 圖表
+  var bars = list.filter(function (k) { return !gIsTv(k); });
+  var cached = bars.filter(fresh), need = bars.filter(function (k) { return !fresh(k); });
   cached.forEach(function (k) { gDraw(k, GR.data[k]); });   // 已經有的先畫，關掉編輯後幾乎立刻出現
-  var done = function () { gLive(list.map(function (k) { return GR.data[k]; }).filter(Boolean)); };
+  var done = function () { gLive(bars.map(function (k) { return GR.data[k]; }).filter(Boolean)); };
   if (!need.length) { done(); return; }
   for (var i = 0, n = 0; i < need.length; i += 8, n++) (function (part, last) {   // 每 8 個一批，先到先畫
     run('webBars', [part, tf], function (r) {
@@ -965,6 +972,15 @@ function gLoad() {
       if (last) done();
     });
   })(need.slice(i, i + 8), i + 8 >= need.length);
+}
+function gTv(k) {
+  var el = document.querySelector('#gBody .gcard[data-k="' + k + '"]'); if (!el) return;
+  el.querySelector('.gname').textContent = gTvName(k);
+  el.querySelector('.gtag').innerHTML = '<span class="tag" style="background:var(--pn2);color:var(--sb)">TradingView</span>';
+  var box = el.querySelector('.gchart'), id = 'gtv' + Math.random().toString(36).slice(2, 8); box.innerHTML = '<div id="' + id + '" style="height:100%"></div>';
+  var go = function () { try { new TradingView.widget({ container_id: id, symbol: k, interval: { '5m': '5', '15m': '15', '30m': '30', '1h': '60', '4h': '240', '1d': 'D', '1wk': 'W' }[P.gtf || '15m'] || '15', autosize: true,
+    theme: /light|paper/.test(P.theme) ? 'light' : 'dark', style: '1', locale: 'zh_TW', timezone: 'Asia/Taipei', hide_top_toolbar: true, hide_legend: false, hide_side_toolbar: true, allow_symbol_change: false, save_image: false }); } catch (e) { box.innerHTML = '<div class="note" style="padding:20px">TradingView 圖表載入失敗</div>'; } };
+  if (window.TradingView) go(); else { var w = gTv.q || (gTv.q = []); w.push(go); if (w.length === 1) { var sc = document.createElement('script'); sc.src = 'https://s3.tradingview.com/tv.js'; sc.onload = function () { gTv.q.forEach(function (f) { f(); }); gTv.q = []; }; sc.onerror = function () { box.innerHTML = '<div class="note" style="padding:20px">無法連到 TradingView</div>'; }; document.head.appendChild(sc); } }
 }
 function gCalc(d) {
   var c = d.c, g = gInd(), p = prm(), o = { lines: [] };
@@ -1077,27 +1093,27 @@ function gIndPop() {
 var GSRC = 'watch';
 function gEdit() {
   var list = gList(), by = { u: [], c: [], t: [] }; list.forEach(function (k) { by[gColOf(k)].push(k); });
-  var nm = function (k) { var d = GR.data[k]; return d && d.title ? d.title : k; };
+  var nm = function (k) { if (gIsTv(k)) return gTvName(k); var d = GR.data[k]; return d && d.title ? d.title : k; };
   $('gEditPop').innerHTML = '<div style="display:flex;align-items:center;gap:8px"><h4 style="margin:0;flex:1">✎ 編輯多張圖表（' + list.length + '／36）</h4><button id="gEdClose">✕ 完成</button></div>' +
-    '<div class="note" style="margin:6px 0">按住右邊 ☰ 拖曳排序、⤒ 置頂、☐ 勾選後刪除；商品會自動放進對應的欄（美股・國際／加密貨幣／台股）。</div>' +
-    '<div id="gEdList">' + GCOLS.map(function (c) { return '<div class="sec" style="margin-top:6px">' + c[1] + ' <span class="note">(' + by[c[0]].length + ')</span></div><div class="gegrp" data-c="' + c[0] + '">' + by[c[0]].map(function (k) { return '<div class="gerow" data-k="' + k + '"><input type="checkbox"><span style="flex:1;min-width:0"><b>' + nm(k) + '</b> <span class="note">' + k + '</span></span><span class="gtop" title="置頂">⤒</span><span class="dh gdh" title="拖曳排序">☰</span></div>'; }).join('') + '</div>'; }).join('') + '</div>' +
-    '<div class="opts" style="margin:8px 0"><button class="ebtn" id="gAll">全選</button><button class="ebtn" id="gDel">🗑️ 刪除勾選</button></div>' +
+    '<div class="note" style="margin:6px 0">按住右邊 ☰ 拖曳排序、⤒ 置頂、✕ 移除；商品會自動放進對應的欄（美股・國際／加密貨幣／台股）。</div>' +
+    '<div id="gEdList">' + GCOLS.map(function (c) { return '<div class="sec" style="margin-top:6px">' + c[1] + ' <span class="note">(' + by[c[0]].length + ')</span></div><div class="gegrp" data-c="' + c[0] + '">' + by[c[0]].map(function (k) { return '<div class="gerow" data-k="' + k + '"><span style="flex:1;min-width:0"><b>' + nm(k) + '</b> <span class="note">' + k.replace(/^CRYPTOCAP:/, '') + '</span></span><span class="gtop" title="置頂">⤒</span><span class="gx" title="移除">✕</span><span class="dh gdh" title="按住拖曳排序">☰</span></div>'; }).join('') + '</div>'; }).join('') + '</div>' +
     '<h4 style="margin:14px 0 6px">➕ 從清單加入</h4><div style="display:flex;gap:6px;position:relative"><input id="gAdd" placeholder="搜尋：2330、NVDA、BTC、1000PEPE.P" style="flex:1;background:var(--bg);border:1px solid var(--ln);border-radius:6px;padding:6px"><div id="gSug" class="gsug"></div></div>' +
     '<div class="tabs" id="gSrcTabs" style="border:0;padding:6px 0"></div><div id="gSrc" style="max-height:34vh;overflow:auto"></div>';
   openPop('gEditPop');
   var save = function () { P.grid = Array.prototype.map.call(document.querySelectorAll('#gEdList .gerow'), function (x) { return x.getAttribute('data-k'); }); save_(true); };
   var add = function (k) { if (!k) return; var l = gList(); if (l.indexOf(k) >= 0) { toast('已經在清單裡'); return; } if (l.length >= 36) { toast('最多 36 個'); return; } l.push(k); P.grid = l; save_(true); gEdit(); };
   $('gEdClose').onclick = function () { closePops(); gLoad(); };
-  $('gAll').onclick = function () { var cbs = document.querySelectorAll('#gEdList input'), on = Array.prototype.some.call(cbs, function (c) { return !c.checked; }); each('#gEdList input', function (c) { c.checked = on; }); };
-  $('gDel').onclick = function () { each('#gEdList .gerow', function (r) { if (r.querySelector('input').checked) r.remove(); }); save(); gEdit(); };
+  each('#gEdList .gx', function (el) { el.onclick = function () { el.parentNode.remove(); save(); gEdit(); }; });
   $('gAdd').oninput = function () { var q = $('gAdd').value.trim(); clearTimeout(gEdit.t); if (!q) { $('gSug').style.display = 'none'; return; } gEdit.t = setTimeout(function () { run('webSearch', [q], function (r) { if ($('gAdd').value.trim() !== q) return; $('gSug').innerHTML = (r || []).map(function (x) { return '<div class="sg" data-k="' + x.key + '"><b>' + x.name + '</b> <span class="note">' + x.sub + '</span><span class="tag" style="margin-left:auto;background:var(--pn2);color:var(--sb)">' + x.mkt + '</span></div>'; }).join(''); $('gSug').style.display = r && r.length ? 'block' : 'none'; each('#gSug .sg', function (el) { el.onpointerdown = function (e) { e.preventDefault(); add(el.getAttribute('data-k')); }; }); }, true); }, 250); };
   $('gAdd').onkeydown = function (e) { if (e.key === 'Enter') add($('gAdd').value.trim()); };
   each('#gEdList .gtop', function (el) { el.onclick = function () { var r = el.parentNode; r.parentNode.insertBefore(r, r.parentNode.firstChild); save(); }; });
   each('#gEdList .gdh', function (h) {
     h.onpointerdown = function (e) {
-      e.preventDefault(); var row = h.parentNode, box = row.parentNode; row.classList.add('drag');
-      var mv = function (ev) { var rows = Array.prototype.slice.call(box.children), y = ev.clientY; for (var i = 0; i < rows.length; i++) { var r = rows[i].getBoundingClientRect(); if (rows[i] !== row && y > r.top && y < r.bottom) { box.insertBefore(row, y < r.top + r.height / 2 ? rows[i] : rows[i].nextSibling); break; } } };
-      var upf = function () { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', upf); row.classList.remove('drag'); save(); };
+      e.preventDefault(); var row = h.parentNode, box = row.parentNode, rc = row.getBoundingClientRect(), dy = e.clientY - rc.top;
+      var gh = row.cloneNode(true); gh.className = 'gerow gghost'; gh.style.width = rc.width + 'px'; gh.style.left = rc.left + 'px'; gh.style.top = rc.top + 'px'; document.body.appendChild(gh);   // 跟著游標走的殘影
+      row.classList.add('drag'); var sc = $('gEditPop');
+      var mv = function (ev) { gh.style.top = (ev.clientY - dy) + 'px'; var pr = sc.getBoundingClientRect(); if (ev.clientY < pr.top + 40) sc.scrollTop -= 12; else if (ev.clientY > pr.bottom - 40) sc.scrollTop += 12; var rows = Array.prototype.slice.call(box.children), y = ev.clientY; for (var i = 0; i < rows.length; i++) { var r = rows[i].getBoundingClientRect(); if (rows[i] !== row && y > r.top && y < r.bottom) { box.insertBefore(row, y < r.top + r.height / 2 ? rows[i] : rows[i].nextSibling); break; } } };
+      var upf = function () { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', upf); gh.remove(); row.classList.remove('drag'); save(); };
       document.addEventListener('pointermove', mv); document.addEventListener('pointerup', upf);
     };
   });
@@ -1108,7 +1124,8 @@ function gEdit() {
     each('#gSrcTabs button', function (b) { b.onclick = function () { GSRC = b.getAttribute('data-s'); showSrc(); }; });
     var m = MK[GSRC], have = gList();
     if (!m) { $('gSrc').innerHTML = '<div class="note" style="padding:10px">⏳ 載入中…</div>'; var c0 = GSRC; if (c0 === 'watch') run('webWatch', [TOKEN], function (w) { W = w; MK.watch = { rows: w.list, at: Date.now() }; if (GSRC === c0) showSrc(); }, true); else run('webMarkets', [c0], function (r) { r.at = Date.now(); MK[c0] = r; if (GSRC === c0) showSrc(); }, true); return; }
-    $('gSrc').innerHTML = (m.rows || []).filter(function (r) { return r.sym; }).map(function (r) { var on = have.indexOf(r.key) >= 0; return '<div class="gerow"><span style="flex:1;min-width:0"><b>' + (/^(US|CRYPTO)$/.test(mk(r)) ? r.sub : r.name) + '</b> <span class="note">' + (/^(US|CRYPTO)$/.test(mk(r)) ? r.name : r.sub) + '</span></span><span class="' + cls(r.pct) + '" style="font-size:.85em">' + pct(r.pct) + '</span><button class="ebtn gsadd" data-k="' + r.key + '"' + (on ? ' disabled' : '') + '>' + (on ? '✓ 已加入' : '＋') + '</button></div>'; }).join('') || '<div class="note">清單是空的</div>';
+    var cxr = GSRC === 'crypto' && m.cx ? m.cx.map(function (x) { var on = have.indexOf(x.key) >= 0; return '<div class="gerow"><span style="flex:1;min-width:0"><b>' + x.name + '</b> <span class="note">' + x.sub + '・TradingView</span></span><button class="ebtn gsadd" data-k="' + x.key + '"' + (on ? ' disabled' : '') + '>' + (on ? '✓ 已加入' : '＋') + '</button></div>'; }).join('') : '';
+    $('gSrc').innerHTML = cxr + (m.idx || []).concat(m.rows || []).filter(function (r) { return r.sym; }).map(function (r) { var on = have.indexOf(r.key) >= 0; return '<div class="gerow"><span style="flex:1;min-width:0"><b>' + (/^(US|CRYPTO)$/.test(mk(r)) ? r.sub : r.name) + '</b> <span class="note">' + (/^(US|CRYPTO)$/.test(mk(r)) ? r.name : r.sub) + '</span></span><span class="' + cls(r.pct) + '" style="font-size:.85em">' + pct(r.pct) + '</span><button class="ebtn gsadd" data-k="' + r.key + '"' + (on ? ' disabled' : '') + '>' + (on ? '✓ 已加入' : '＋') + '</button></div>'; }).join('') || '<div class="note">清單是空的</div>';
     each('#gSrc .gsadd', function (b) { b.onclick = function () { add(b.getAttribute('data-k')); }; });
   };
   showSrc();
@@ -1237,7 +1254,7 @@ function items() { return Array.prototype.map.call($('mlist').children, function
 function saveWatch() { saveItems(items()); }
 function saveItems(it) { run('webWatchSave', [TOKEN, it], function (w) { if (w.error) { toast('⚠️ ' + w.error); return; } setW(w); toast('✅ 已儲存（LINE「我的自選」也同步）'); }); }
 function setW(w) { W = w; MK.watch = { rows: w.list, at: Date.now() }; if (CAT === 'watch') renderList(MK.watch); renderStar(); [CB, CC, CD].forEach(starX); }
-function pick(k) { if (SPLIT && ACT !== 'A' && EX[ACT]) loadX(EX[ACT], k); else { tvHide('A'); load(k); if (innerWidth < 820) scrollTo({ top: 0, behavior: 'smooth' }); } }
+function pick(k) { if (/^CRYPTOCAP:/.test(k)) { tvShow(actCx(), k, k.replace(/^CRYPTOCAP:/, '')); return; } if (SPLIT && ACT !== 'A' && EX[ACT]) loadX(EX[ACT], k); else { tvHide('A'); load(k); if (innerWidth < 820) scrollTo({ top: 0, behavior: 'smooth' }); } }
 /* ---------- 清單即時更新：加密貨幣、永續合約用 Binance 全市場行情（約每秒），股票每 15 秒 ---------- */
 var LV = { s: null, f: null };
 function lvRow(base, perp, c, o) {
