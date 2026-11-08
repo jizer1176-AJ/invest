@@ -104,8 +104,6 @@
   #paneA, #paneB, #paneC, #paneD { position:relative; flex:1 1 0; min-width:0; min-height:0; overflow:hidden; }
   #paneB, #paneC, #paneD { display:none; border-left:1px solid var(--ln); flex-direction:column; }
   body.split #paneB, body.split3 #paneC, body.split4 #paneD { display:flex; }
-  body.split4 #chartWrap { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }
-  body.split4 #paneC, body.split4 #paneD { border-top:1px solid var(--ln); }
   body.split #paneA.act::after, body.split #paneB.act::after, body.split #paneC.act::after, body.split #paneD.act::after { content:''; position:absolute; inset:0; border:2px solid var(--ac); pointer-events:none; z-index:12; }
   .pstar { padding:2px 6px; font-size:1.05em; }
   .xbar { display:flex; align-items:center; gap:6px; padding:4px 8px; border-bottom:1px solid var(--ln); flex-wrap:wrap; font-size:.9em; }
