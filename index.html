@@ -104,6 +104,12 @@
   #paneA, #paneB, #paneC, #paneD { position:relative; flex:1 1 0; min-width:0; min-height:0; overflow:hidden; }
   #paneB, #paneC, #paneD { display:none; border-left:1px solid var(--ln); flex-direction:column; }
   body.split #paneB, body.split3 #paneC, body.split4 #paneD { display:flex; }
+  body.split4:not(.srow) #chartWrap { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; height:calc(100vh - 52px); flex:none; }   /* 田字排列，四張都用滿整個畫面高度 */
+  body.split4:not(.srow) #paneC, body.split4:not(.srow) #paneD { border-top:1px solid var(--ln); }
+  body.split4.srow #chartWrap { height:calc(100vh - 52px); flex:none; }
+  body.split3 #lg, body.split3 #lgB, body.split3 #lgC, body.split3 #lgD, body.split4 #lg, body.split4 #lgB, body.split4 #lgC, body.split4 #lgD { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:.76em; line-height:1.45; }   /* 窄的時候指標文字最多兩行，不擋 K 線 */
+  body.split3 .plg, body.split4 .plg { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:.76em; }
+  #slayBtn { display:none; } body.split4 #slayBtn { display:inline-block; }
   body.split #paneA.act::after, body.split #paneB.act::after, body.split #paneC.act::after, body.split #paneD.act::after { content:''; position:absolute; inset:0; border:2px solid var(--ac); pointer-events:none; z-index:12; }
   .pstar { padding:2px 6px; font-size:1.05em; }
   .xbar { display:flex; align-items:center; gap:6px; padding:4px 8px; border-bottom:1px solid var(--ln); flex-wrap:wrap; font-size:.9em; }
@@ -229,7 +235,7 @@
     <button id="fitBtn" title="顯示全部">⤢</button>
     <button id="drawBtn" title="畫水平線、趨勢線">✏️ 畫線</button>
     <button id="gridBtn" title="多張圖表：往下一次看一整排">▦ 多圖</button>
-    <button id="splitBtn" title="分割畫面（電腦最多 4 個、手機 2 個）">▥ 分割</button>
+    <button id="splitBtn" title="分割畫面（電腦最多 4 個、手機 2 個）">▥ 分割</button><button id="slayBtn" title="四張圖的排列方式">⊞ 田字</button>
   </div>
   <span class="grow"></span>
   <button id="setBtn" title="外觀設定">⚙️ 外觀</button>
@@ -440,7 +446,7 @@ function draw(cx) {
   cx.vrkey = vk;
   var up = css('--upc'), dn = css('--dnc'), tx = css('--sb'), ln = css('--ln'), bg = css('--bg'), gr = P.grid ? css('--grid') : 'transparent';
   var ch = LC.createChart($(cx.el), { autoSize: true, layout: { background: { color: bg }, textColor: tx, fontSize: Math.max(10, P.fs - 2), panes: { separatorColor: ln, separatorHoverColor: css('--ac') } },
-    grid: { vertLines: { color: gr }, horzLines: { color: gr } }, rightPriceScale: { borderColor: ln, mode: P.log ? 1 : 0, scaleMargins: { top: 0.08, bottom: 0.06 } },
+    grid: { vertLines: { color: gr }, horzLines: { color: gr } }, rightPriceScale: { borderColor: ln, mode: P.log ? 1 : 0, scaleMargins: { top: SPLITN >= 3 ? 0.17 : SPLIT ? 0.12 : 0.08, bottom: 0.06 } },
     timeScale: { borderColor: ln, timeVisible: !/1d|1wk/.test(d.tf), rightOffset: 8 }, crosshair: { mode: 0 } });
   cx.chart = ch; cx.lv = []; cx.vs = null; cx.hs = null;
   var dp = d.info.dp, pf = { type: 'price', precision: dp, minMove: Math.pow(10, -dp) }, fix = function (lo, hi) { return function () { return { priceRange: { minValue: lo, maxValue: hi } }; }; };
@@ -587,7 +593,7 @@ function wsStart(o) {
   var sym = d.info.sym, tf = d.tf;
   try {
     var ws = new WebSocket((perp ? 'wss://fstream.binance.com/stream?streams=' : 'wss://stream.binance.com:9443/stream?streams=') + base + 'usdt@kline_' + BNIV[tf] + '/' + base + 'usdt@ticker/' + base + 'usdt@aggTrade'); o.ws = ws;
-    var t0 = setTimeout(function () { if (!o.live) wsStop(o); }, 10000);
+    var t0 = null;
     ws.onmessage = function (ev) {
       var dd = o.d; if (!dd || dd.info.sym !== sym || dd.tf !== tf) { wsStop(o); return; }
       var m = JSON.parse(ev.data), x = m.data || m;
@@ -600,14 +606,14 @@ function wsStart(o) {
       var k = x.k; if (!k) return; o.live = true; clearTimeout(t0);
       applyBar(o, { t: k.t / 1000 + 8 * 3600, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.q });
     };
-    ws.onclose = function () { o.live = false; };
+    ws.onclose = function () { o.live = false; if (o.ws === ws) { o.ws = null; setTimeout(function () { var dd = o.d; if (dd && dd.info.sym === sym && dd.tf === tf && !o.ws) wsStart(o); }, 1500); } };   // 斷線 1.5 秒後自動重連
   } catch (e) {}
 }
 function applyBar(o, k) {
   var d = o.d, ms = o.ms; if (!d || !ms) return;
   var s = d.ser, L = s.t.length - 1;
   if (k.t > s.t[L]) {
-    if (k.t - s.t[L] > TFSEC[d.tf] * 3) return;
+    if (k.t - s.t[L] > TFSEC[d.tf] * 3) { var nw = Date.now(); if (nw - (o.gapAt || 0) > 30000) { o.gapAt = nw; if (o === CA) load(null, null, { silent: true, force: true }); else if (o.d) loadX(o, o.d.info.key, o.d.tf); } return; }   // 資料太舊接不上 → 重新抓
     Object.keys(s).forEach(function (x) { if (Array.isArray(s[x])) s[x].push(null); });
     L++; s.t[L] = k.t; s.o[L] = k.o; s.h[L] = k.h; s.l[L] = k.l; s.c[L] = k.c; s.v[L] = k.v || 0; o.newBar = true;
   } else { var same = k.t === s.t[L] && !k.tick; s.c[L] = k.c; s.h[L] = Math.max(s.h[L], k.c, same ? k.h : k.c); s.l[L] = Math.min(s.l[L], k.c, same ? k.l : k.c); if (same && k.v != null) s.v[L] = k.v; }
@@ -881,6 +887,7 @@ function toggleSplit(n) {
   var max = innerWidth < 820 ? 2 : 4;
   SPLITN = n != null ? n : (SPLITN >= max ? 1 : SPLITN + 1); SPLIT = SPLITN > 1; P.split = SPLITN; save_(false);
   document.body.classList.toggle('split', SPLITN >= 2); document.body.classList.toggle('split3', SPLITN >= 3); document.body.classList.toggle('split4', SPLITN >= 4);
+  document.body.classList.toggle('srow', P.slay === 'row'); $('slayBtn').textContent = P.slay === 'row' ? '▥ 並排' : '⊞ 田字';
   $('splitBtn').className = SPLIT ? 'on' : ''; $('splitBtn').textContent = SPLIT ? '▥ 分割 ×' + SPLITN : '▥ 分割';
   [CB, CC, CD].forEach(function (cx, i) {
     if (SPLITN >= i + 2) { if (!cx.d) loadX(cx, (P['split' + cx.id] || [])[0] || ['BTC', 'ETH', 'NVDA'][i], (P['split' + cx.id] || [])[1] || ['1h', '4h', '1d'][i]); }
@@ -933,7 +940,8 @@ var SPLIT_BIND = function () {
     var x = cx.px;
     $(x + 'Star').onclick = function (e) { e.stopPropagation(); if (cx.d) toggleWatch(cx.d); };
   });
-  $('splitBtn').onclick = function () { toggleSplit(); };
+  $('slayBtn').onclick = function () { P.slay = P.slay === 'row' ? 'grid' : 'row'; save_(true); document.body.classList.toggle('srow', P.slay === 'row'); this.textContent = P.slay === 'row' ? '▥ 並排' : '⊞ 田字'; setTimeout(function () { panes().forEach(function (cx) { if (cx.d) draw(cx); }); }, 50); };
+$('splitBtn').onclick = function () { toggleSplit(); };
 };
 
 /* ---------- 畫線工具（仿 Binance／TradingView）：多種線型、選取後可調整、Delete 刪除、自動儲存（跟著帳號） ---------- */
